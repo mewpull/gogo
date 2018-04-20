@@ -3,9 +3,15 @@ type Node struct {
 	y int
 }
 
+type Hello struct {
+	x int
+}
+
 func main() {
-	a := Node{}
-	b := Node{1 + 2, 3}
-	c := b.x 
+	a := Hello{1}
+	b := Node{1 + 5, 3}
+	c := b.x
+	d := 
+	printInt c
 	return
 }

@@ -1,8 +1,16 @@
-func temp(a, b int) (int) {
-	return a, b
+func temp(a, c int) (int, int) {
+	return a, c
 }
 
+// func noRet() {
+// 	a := 1
+// 	printInt a
+// 	return
+// }
+//
 func main() {
-	retval := temp(1, 2)
+	x, y := temp(1, 2)
+	printInt y
+	// noRet()
 	return
 }
