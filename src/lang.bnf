@@ -95,15 +95,16 @@ import(
         "strconv"
         "strings"
 
+        "github.com/shivansh/gogo/src/ast"
         "github.com/shivansh/gogo/src/utils"
         "github.com/shivansh/gogo/tmp/token"
 )
 
-// Node represents a node in the AST of a given program.
-type Node struct {
-	place string   // variable storing the value if node represents an expression
-	code  []string // IR instructions
-}
+// ast.Node represents a node in the AST of a given program.
+// type ast.Node struct {
+// 	place string   // variable storing the value if node represents an expression
+// 	code  []string // IR instructions
+// }
 
 type symTabType map[string][]string
 
@@ -224,41 +225,28 @@ func RenameVariable(v string) string {
 // NOTE: https://github.com/goccmack/gocc/issues/5998
 
 // SourceFile = PackageClause ";" { ImportDecl ";" } { TopLevelDecl ";" } .
-Start : SourceFile
-        << func() (Attrib, error) {
-	        re := regexp.MustCompile("\n(\n)*")
-                c := $0.(Node).code
-                for _, v := range c {
-                        v := strings.TrimSpace(v)
-                        // Compress multiple newlines within IR statements into
-                        // a single newline.
-                        v = re.ReplaceAllString(v, "\n")
-                        if v != "" {
-                                fmt.Println(v)
-                        }
-                }
-                return nil, nil
-        } () >>
-      ;
+Start
+        : SourceFile   << ast.PrintIR($0) >>
+        ;
 
 // SourceFile : PackageClause terminator RepeatTerminator RepeatImportDecl RepeatTopLevelDecl
 SourceFile : RepeatTopLevelDecl
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
            ;
 
 // RepeatImportDecl : ImportDecl terminator RepeatTerminator RepeatImportDecl
 //                         << func() (Attrib, error) {
-//                                 n := Node{"", []string{}}
-//                                 n.code = append(n.code, $0.(Node).code...)
-//                                 n.code = append(n.code, $3.(Node).code...)
-//                                 n.code = append(n.code, "\n")
+//                                 n := ast.Node{"", []string{}}
+//                                 n.Code = append(n.Code, $0.(ast.Node).Code...)
+//                                 n.Code = append(n.Code, $3.(ast.Node).Code...)
+//                                 n.Code = append(n.Code, "\n")
 //                                 return nil, nil
 //                         } () >>
 //                  | empty
 //                         << func() (Attrib, error) {
-//                                 n := Node{"", []string{}}
+//                                 n := ast.Node{"", []string{}}
 //                                 return n, nil
 //                         } () >>
 //                  ;
@@ -338,38 +326,38 @@ SourceFile : RepeatTopLevelDecl
 // TopLevelDecl  = Declaration | FunctionDecl | MethodDecl .
 RepeatTopLevelDecl : TopLevelDecl RepeatTopLevelDecl
                         << func() (Attrib, error) {
-                              n := Node{"", $0.(Node).code}
-                              n.code = append(n.code, $1.(Node).code...)
+                              n := ast.Node{"", $0.(ast.Node).Code}
+                              n.Code = append(n.Code, $1.(ast.Node).Code...)
                               return n, nil
                         } () >>
                    | empty
                         << func() (Attrib, error) {
-                              return Node{"", []string{}}, nil
+                              return ast.Node{"", []string{}}, nil
                         } () >>
                    ;
 
 TopLevelDecl : Declaration RepeatTerminator
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
              | FunctionDecl RepeatTerminator
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
              ;
 
 // Declaration = ConstDecl | TypeDecl | VarDecl .
 Declaration : ConstDecl
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
             | TypeDecl
                     << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                     } () >>
             | VarDecl
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
             ;
 
@@ -377,7 +365,7 @@ Declaration : ConstDecl
 // VarSpec     = IdentifierList ( Type [ "=" ExpressionList ] | "=" ExpressionList ) .
 VarDecl : kwdVar VarSpec
             << func() (Attrib, error) {
-                    return Node{"", $1.(Node).code}, nil
+                    return ast.Node{"", $1.(ast.Node).Code}, nil
             } () >>
 //         | kwdVar "(" RepeatTerminator RepeatVarSpec ")"
 //             << func() (Attrib, error) {
@@ -401,39 +389,39 @@ VarDecl : kwdVar VarSpec
 //
 VarSpec : IdentifierList Type
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
-                        for _, v := range $0.(Node).code {
+                        n := ast.Node{"", []string{}}
+                        for _, v := range $0.(ast.Node).Code {
                                 renamedVar := RenameVariable(v)
                                 currSymTab.varSymTab[v] = []string{renamedVar, "int"} // TODO: Handle other types
-                                n.code = append(n.code, fmt.Sprintf("=, %s, 0", renamedVar))
+                                n.Code = append(n.Code, fmt.Sprintf("=, %s, 0", renamedVar))
                         }
                         return n, nil
                 } () >>
         | IdentifierList Type "=" ExpressionList
                 << func() (Attrib, error) {
-                        n := Node{"", $3.(Node).code}
-                        expr := utils.SplitAndSanitize($3.(Node).place, ",")
-                        for k, v := range $0.(Node).code {
+                        n := ast.Node{"", $3.(ast.Node).Code}
+                        expr := utils.SplitAndSanitize($3.(ast.Node).Place, ",")
+                        for k, v := range $0.(ast.Node).Code {
                                 renamedVar := RenameVariable(v)
                                 currSymTab.varSymTab[v] = []string{renamedVar, "int"} // TODO: Handle other types
-                                n.code = append(n.code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
+                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
                         }
                         return n, nil
                 } () >>
         | IdentifierList "=" ExpressionList
                 << func() (Attrib, error) {
-                        n := Node{"", $2.(Node).code}
-                        expr := utils.SplitAndSanitize($2.(Node).place, ",")
-                        for k, v := range $0.(Node).code {
+                        n := ast.Node{"", $2.(ast.Node).Code}
+                        expr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
+                        for k, v := range $0.(ast.Node).Code {
                                 renamedVar := RenameVariable(v)
                                 currSymTab.varSymTab[v] = []string{renamedVar, "int"} // TODO: Handle other types
-                                n.code = append(n.code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
+                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
                         }
                         return n, nil
                 } () >>
         | empty
                 << func() (Attrib, error) {
-                        return Node{"", []string{}}, nil
+                        return ast.Node{"", []string{}}, nil
                 } () >>
         ;
 
@@ -443,7 +431,7 @@ VarSpec : IdentifierList Type
 // TypeDef   = identifier Type
 TypeDecl : kwdType TypeSpec
                 << func() (Attrib, error) {
-                        typeInfo := utils.SplitAndSanitize($1.(Node).place, ",")
+                        typeInfo := utils.SplitAndSanitize($1.(ast.Node).Place, ",")
                         structName := strings.TrimSpace(typeInfo[1])
                         switch strings.TrimSpace(typeInfo[0]) {
                         case "struct":
@@ -451,12 +439,12 @@ TypeDecl : kwdType TypeSpec
                                 // NOTE: The symbol table entry of a struct is of the form -
                                 //      structName : []{"struct", memberName1, memberType1, memberName2, memberType2, ...}
                                 globalSymTab[structName] = []string{"struct"}
-                                globalSymTab[structName] = append(globalSymTab[structName], $1.(Node).code...)
+                                globalSymTab[structName] = append(globalSymTab[structName], $1.(ast.Node).Code...)
                         default: // TODO: Add remaining types.
                                 return nil, errors.New("Unknown type")
                         }
                         // TODO: Member initialization will be done when a new object is instantiated.
-                        return Node{"", []string{}}, nil
+                        return ast.Node{"", []string{}}, nil
                 } () >>
 //          | kwdType "(" RepeatTerminator RepeatTypeSpec ")"
 //                 << func() (Attrib, error) {
@@ -479,7 +467,7 @@ TypeDecl : kwdType TypeSpec
 //
 TypeSpec : TypeDef
             << func() (Attrib, error) {
-                return Node{$0.(Node).place, $0.(Node).code}, nil
+                return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
             } () >>
 //          |    AliasDecl
 //             << func() (Attrib, error) {
@@ -502,7 +490,7 @@ TypeSpec : TypeDef
 
 TypeDef : identifier Type
              << func() (Attrib, error) {
-                    return Node{fmt.Sprintf("%s, %s", $1.(Node).place, string($0.(*token.Token).Lit)), $1.(Node).code}, nil
+                    return ast.Node{fmt.Sprintf("%s, %s", $1.(ast.Node).Place, string($0.(*token.Token).Lit)), $1.(ast.Node).Code}, nil
              } () >>
         ;
 
@@ -512,7 +500,7 @@ TypeDef : identifier Type
 // ExpressionList = Expression { "," Expression } .
 ConstDecl : kwdConst ConstSpec
                 << func() (Attrib, error) {
-                        return Node{"", $1.(Node).code}, nil
+                        return ast.Node{"", $1.(ast.Node).Code}, nil
                 } () >>
           // | kwdConst "(" RepeatTerminator RepeatConstSpec ")"
           //   << func() (Attrib, error) {
@@ -535,22 +523,22 @@ ConstDecl : kwdConst ConstSpec
 
 ConstSpec : IdentifierList
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
-                        for _, v := range $0.(Node).code {
+                        n := ast.Node{"", []string{}}
+                        for _, v := range $0.(ast.Node).Code {
                                 renamedVar := RenameVariable(v)
                                 currSymTab.varSymTab[v] = []string{renamedVar, "int"} // TODO: Handle other types
-                                n.code = append(n.code, fmt.Sprintf("=, %s, 0", renamedVar))
+                                n.Code = append(n.Code, fmt.Sprintf("=, %s, 0", renamedVar))
                         }
                         return n, nil
                 } () >>
           | IdentifierList "=" ExpressionList
                 << func() (Attrib, error) {
-                        n := Node{"", $2.(Node).code}
-                        expr := utils.SplitAndSanitize($2.(Node).place, ",")
-                        for k, v := range $0.(Node).code {
+                        n := ast.Node{"", $2.(ast.Node).Code}
+                        expr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
+                        for k, v := range $0.(ast.Node).Code {
                                 renamedVar := RenameVariable(v)
                                 currSymTab.varSymTab[v] = []string{renamedVar, "int"}
-                                n.code = append(n.code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
+                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
                         }
                         return n, nil
                 } () >>
@@ -568,13 +556,13 @@ ConstSpec : IdentifierList
 
 ExpressionList : Expression
                         << func() (Attrib, error) {
-                                return Node{$0.(Node).place, $0.(Node).code}, nil
+                                return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                         } () >>
                | Expression "," ExpressionList
                         << func() (Attrib, error) {
-                                n := Node{"", $0.(Node).code}
-                                n.code = append(n.code, $2.(Node).code...)
-                                n.place = fmt.Sprintf("%s,%s", $0.(Node).place, $2.(Node).place)
+                                n := ast.Node{"", $0.(ast.Node).Code}
+                                n.Code = append(n.Code, $2.(ast.Node).Code...)
+                                n.Place = fmt.Sprintf("%s,%s", $0.(ast.Node).Place, $2.(ast.Node).Place)
                                 return n, nil
                         } () >>
                ;
@@ -585,57 +573,57 @@ ExpressionList : Expression
 // increasing precedence starting from top.
 Expression : Expression "||" Term1
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
                         trueLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.place = NewTmp()
-                        n.code = append(n.code, fmt.Sprintf("beq, %s, %s, 1", trueLabel, $0.(Node).place))
-                        n.code = append(n.code, fmt.Sprintf("beq, %s, %s, 1", trueLabel, $2.(Node).place))
-                        n.code = append(n.code, fmt.Sprintf("=, %s, 0", n.place))
-                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", trueLabel))
-                        n.code = append(n.code, fmt.Sprintf("=, %s, 1", n.place))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Place = NewTmp()
+                        n.Code = append(n.Code, fmt.Sprintf("beq, %s, %s, 1", trueLabel, $0.(ast.Node).Place))
+                        n.Code = append(n.Code, fmt.Sprintf("beq, %s, %s, 1", trueLabel, $2.(ast.Node).Place))
+                        n.Code = append(n.Code, fmt.Sprintf("=, %s, 0", n.Place))
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", trueLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("=, %s, 1", n.Place))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
            | Term1
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
            ;
 
 Term1 : Term1 "&&" Term2
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
                         falseLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.place = NewTmp()
-                        n.code = append(n.code, fmt.Sprintf("beq, %s, %s, 0", falseLabel, $0.(Node).place))
-                        n.code = append(n.code, fmt.Sprintf("beq, %s, %s, 0", falseLabel, $2.(Node).place))
-                        n.code = append(n.code, fmt.Sprintf("=, %s, 1", n.place))
-                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", falseLabel))
-                        n.code = append(n.code, fmt.Sprintf("=, %s, 0", n.place))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Place = NewTmp()
+                        n.Code = append(n.Code, fmt.Sprintf("beq, %s, %s, 0", falseLabel, $0.(ast.Node).Place))
+                        n.Code = append(n.Code, fmt.Sprintf("beq, %s, %s, 0", falseLabel, $2.(ast.Node).Place))
+                        n.Code = append(n.Code, fmt.Sprintf("=, %s, 1", n.Place))
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", falseLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("=, %s, 0", n.Place))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
         | Term2
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
         ;
 
 Term2 : Term2 RelOp Term3
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.place = NewTmp()
-                        n.code = append(n.code, $2.(Node).code...)
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Place = NewTmp()
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
                         branchOp := ""
                         falseLabel := NewLabel()
                         afterLabel := NewLabel()
-                        switch $1.(Node).place {
+                        switch $1.(ast.Node).Place {
                                 case "==":
                                         branchOp = "bne"
                                 case "!=":
@@ -649,207 +637,207 @@ Term2 : Term2 RelOp Term3
                                 case ">":
                                         branchOp = "ble"
                         }
-                        n.code = append(n.code, fmt.Sprintf("%s, %s, %s, %s", branchOp, falseLabel, $0.(Node).place, $2.(Node).place))
-                        n.code = append(n.code, fmt.Sprintf("=, %s, 1", n.place))
-                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", falseLabel))
-                        n.code = append(n.code, fmt.Sprintf("=, %s, 0", n.place))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("%s, %s, %s, %s", branchOp, falseLabel, $0.(ast.Node).Place, $2.(ast.Node).Place))
+                        n.Code = append(n.Code, fmt.Sprintf("=, %s, 1", n.Place))
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", falseLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("=, %s, 0", n.Place))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
         | Term3
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
         ;
 
 Term3 : Term3 "+" Term4
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
-                        if re.MatchString($0.(Node).place) && re.MatchString($2.(Node).place) {
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        if re.MatchString($0.(ast.Node).Place) && re.MatchString($2.(ast.Node).Place) {
                                 // expression is of the form 1+2
-                                term3val, err := strconv.Atoi($0.(Node).place)
+                                term3val, err := strconv.Atoi($0.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                term4val, err := strconv.Atoi($2.(Node).place)
+                                term4val, err := strconv.Atoi($2.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                n.place = strconv.Itoa(term3val + term4val)
-                        } else if re.MatchString($0.(Node).place) {
+                                n.Place = strconv.Itoa(term3val + term4val)
+                        } else if re.MatchString($0.(ast.Node).Place) {
                                 // expression is of the form 1+b, which is to be converted to b+1
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("+, %s, %s, %s", n.place, $2.(Node).place, $0.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("+, %s, %s, %s", n.Place, $2.(ast.Node).Place, $0.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         } else {
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("+, %s, %s, %s", n.place, $0.(Node).place, $2.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("+, %s, %s, %s", n.Place, $0.(ast.Node).Place, $2.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         }
                         return n, nil
                 } () >>
         | Term4
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
         ;
 
 Term4 : Term4 "-" Term5
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
-                        if re.MatchString($0.(Node).place) && re.MatchString($2.(Node).place) {
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        if re.MatchString($0.(ast.Node).Place) && re.MatchString($2.(ast.Node).Place) {
                                 // expression is of the form 1+2
-                                term3val, err := strconv.Atoi($0.(Node).place)
+                                term3val, err := strconv.Atoi($0.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                term4val, err := strconv.Atoi($2.(Node).place)
+                                term4val, err := strconv.Atoi($2.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                n.place = strconv.Itoa(term3val - term4val)
-                        } else if re.MatchString($0.(Node).place) {
+                                n.Place = strconv.Itoa(term3val - term4val)
+                        } else if re.MatchString($0.(ast.Node).Place) {
                                 // expression is of the form 1+b, which is to be converted to b+1
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("-, %s, %s, %s", n.place, $2.(Node).place, $0.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("-, %s, %s, %s", n.Place, $2.(ast.Node).Place, $0.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         } else {
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("-, %s, %s, %s", n.place, $0.(Node).place, $2.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("-, %s, %s, %s", n.Place, $0.(ast.Node).Place, $2.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         }
                         return n, nil
                 } () >>
       | Term5
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
       ;
 
 Term5 : Term5 "*" Term6
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
-                        if re.MatchString($0.(Node).place) && re.MatchString($2.(Node).place) {
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        if re.MatchString($0.(ast.Node).Place) && re.MatchString($2.(ast.Node).Place) {
                                 // expression is of the form 1+2
-                                term3val, err := strconv.Atoi($0.(Node).place)
+                                term3val, err := strconv.Atoi($0.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                term4val, err := strconv.Atoi($2.(Node).place)
+                                term4val, err := strconv.Atoi($2.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                n.place = strconv.Itoa(term3val * term4val)
-                        } else if re.MatchString($0.(Node).place) {
+                                n.Place = strconv.Itoa(term3val * term4val)
+                        } else if re.MatchString($0.(ast.Node).Place) {
                                 // expression is of the form 1+b, which is to be converted to b+1
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("*, %s, %s, %s", n.place, $2.(Node).place, $0.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("*, %s, %s, %s", n.Place, $2.(ast.Node).Place, $0.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         } else {
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("*, %s, %s, %s", n.place, $0.(Node).place, $2.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("*, %s, %s, %s", n.Place, $0.(ast.Node).Place, $2.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         }
                         return n, nil
                 } () >>
       | Term6
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
       ;
 
 Term6 : Term6 "/" Term7
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
-                        if re.MatchString($0.(Node).place) && re.MatchString($2.(Node).place) {
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        if re.MatchString($0.(ast.Node).Place) && re.MatchString($2.(ast.Node).Place) {
                                 // expression is of the form 1+2
-                                term3val, err := strconv.Atoi($0.(Node).place)
+                                term3val, err := strconv.Atoi($0.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                term4val, err := strconv.Atoi($2.(Node).place)
+                                term4val, err := strconv.Atoi($2.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                n.place = strconv.Itoa(term3val / term4val)
-                        } else if re.MatchString($0.(Node).place) {
+                                n.Place = strconv.Itoa(term3val / term4val)
+                        } else if re.MatchString($0.(ast.Node).Place) {
                                 // expression is of the form 1+b, which is to be converted to b+1
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("/, %s, %s, %s", n.place, $2.(Node).place, $0.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("/, %s, %s, %s", n.Place, $2.(ast.Node).Place, $0.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         } else {
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("/, %s, %s, %s", n.place, $0.(Node).place, $2.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("/, %s, %s, %s", n.Place, $0.(ast.Node).Place, $2.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         }
                         return n, nil
                 } () >>
       | Term7
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
       ;
 
 Term7 : Term7 "%" Term8
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
-                        if re.MatchString($0.(Node).place) && re.MatchString($2.(Node).place) {
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        if re.MatchString($0.(ast.Node).Place) && re.MatchString($2.(ast.Node).Place) {
                                 // expression is of the form 1+2
-                                term3val, err := strconv.Atoi($0.(Node).place)
+                                term3val, err := strconv.Atoi($0.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                term4val, err := strconv.Atoi($2.(Node).place)
+                                term4val, err := strconv.Atoi($2.(ast.Node).Place)
                                 if err != nil {
                                         return nil, err
                                 }
-                                n.place = strconv.Itoa(term3val % term4val)
-                        } else if re.MatchString($0.(Node).place) {
+                                n.Place = strconv.Itoa(term3val % term4val)
+                        } else if re.MatchString($0.(ast.Node).Place) {
                                 // expression is of the form 1+b, which is to be converted to b+1
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("rem, %s, %s, %s", n.place, $2.(Node).place, $0.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("rem, %s, %s, %s", n.Place, $2.(ast.Node).Place, $0.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         } else {
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("rem, %s, %s, %s", n.place, $0.(Node).place, $2.(Node).place))
-                                n.code = append(n.code, "\n")
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("rem, %s, %s, %s", n.Place, $0.(ast.Node).Place, $2.(ast.Node).Place))
+                                n.Code = append(n.Code, "\n")
                         }
                         return n, nil
                 } () >>
       | Term8
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
       ;
 
 Term8 : "(" Expression ")"
                 << func() (Attrib, error) {
-                        return Node{$1.(Node).place, $1.(Node).code}, nil
+                        return ast.Node{$1.(ast.Node).Place, $1.(ast.Node).Code}, nil
                 } () >>
       | UnaryExpr
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
       ;
 
 // TODO: Add support for booleans in IR.
 BinaryOp : RelOp
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, []string{}}, nil
+                        return ast.Node{$0.(ast.Node).Place, []string{}}, nil
                 } () >>
          | "||"
                 << func() (Attrib, error) {
-                        return Node{"or", []string{}}, nil
+                        return ast.Node{"or", []string{}}, nil
                 } () >>
          | "&&"
                 << func() (Attrib, error) {
-                        return Node{"and", []string{}}, nil
+                        return ast.Node{"and", []string{}}, nil
                 } () >>
          ;
 
@@ -858,64 +846,64 @@ BinaryOp : RelOp
 // binaryOp    : '|' '|' | '&' '&' | _relOp | _addOp | _mulOp ;
 RelOp : "=="
         << func() (Attrib, error) {
-                return Node{"==", []string{}}, nil
+                return ast.Node{"==", []string{}}, nil
         } () >>
       | "!="
         << func() (Attrib, error) {
-                return Node{"!=", []string{}}, nil
+                return ast.Node{"!=", []string{}}, nil
         } () >>
       | "<="
         << func() (Attrib, error) {
-                return Node{"<=", []string{}}, nil
+                return ast.Node{"<=", []string{}}, nil
         } () >>
       | "<"
         << func() (Attrib, error) {
-                return Node{"<", []string{}}, nil
+                return ast.Node{"<", []string{}}, nil
         } () >>
       | ">="
         << func() (Attrib, error) {
-                return Node{">=", []string{}}, nil
+                return ast.Node{">=", []string{}}, nil
         } () >>
       | ">"
         << func() (Attrib, error) {
-                return Node{">", []string{}}, nil
+                return ast.Node{">", []string{}}, nil
         } () >>
       ;
 
 // UnaryExpr  = PrimaryExpr | unary_op UnaryExpr .
 UnaryExpr : PrimaryExpr
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
           | UnaryOp UnaryExpr
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
-                        n.code = append(n.code, $1.(Node).code...)
-                        switch $0.(Node).place {
+                        n := ast.Node{"", []string{}}
+                        n.Code = append(n.Code, $1.(ast.Node).Code...)
+                        switch $0.(ast.Node).Place {
                         case "-":
-                                if re.MatchString($1.(Node).place) {
+                                if re.MatchString($1.(ast.Node).Place) {
                                         // expression is of the form 1+2
-                                        term3val, err := strconv.Atoi($1.(Node).place)
+                                        term3val, err := strconv.Atoi($1.(ast.Node).Place)
                                         if err != nil {
                                                 return nil, err
                                         }
-                                        n.place = strconv.Itoa(term3val * -1)
+                                        n.Place = strconv.Itoa(term3val * -1)
                                 } else {
-                                        n.place = NewTmp()
-                                        n.code = append(n.code, fmt.Sprintf("*, %s, %s, -1", n.place, $1.(Node).place))
+                                        n.Place = NewTmp()
+                                        n.Code = append(n.Code, fmt.Sprintf("*, %s, %s, -1", n.Place, $1.(ast.Node).Place))
                                 }
                         case "!":
-                                n.place = NewTmp()
-                                n.code = append(n.code, fmt.Sprintf("not, %s, %s", n.place, $1.(Node).place))
+                                n.Place = NewTmp()
+                                n.Code = append(n.Code, fmt.Sprintf("not, %s, %s", n.Place, $1.(ast.Node).Place))
                         case "+":
-                                n.place = $1.(Node).place
+                                n.Place = $1.(ast.Node).Place
                         case "&":
                                 // Place of any pointer variable starts with "pointer:" and then followed by string returned by NewTmp()
-                                n.place = "pointer:" + $1.(Node).place
+                                n.Place = "pointer:" + $1.(ast.Node).Place
                         case "*":
-                                n.place = "deref:" + $1.(Node).place
+                                n.Place = "deref:" + $1.(ast.Node).Place
                         default:
-                                return n, errors.New(fmt.Sprintf("%s operator not supported", $0.(Node).place))
+                                return n, errors.New(fmt.Sprintf("%s operator not supported", $0.(ast.Node).Place))
                         }
                         return n, nil
                 } () >>
@@ -923,15 +911,15 @@ UnaryExpr : PrimaryExpr
 
 UnaryOp : "+"
               << func() (Attrib, error) {
-                    return Node{"+", []string{}}, nil
+                    return ast.Node{"+", []string{}}, nil
               } () >>
         | "-"
               << func() (Attrib, error) {
-                    return Node{"-", []string{}}, nil
+                    return ast.Node{"-", []string{}}, nil
               } () >>
         | "!"
               << func() (Attrib, error) {
-                    return Node{"!", []string{}}, nil
+                    return ast.Node{"!", []string{}}, nil
               } () >>
 //         | "^"
 //               << func() (Attrib, error) {
@@ -940,11 +928,11 @@ UnaryOp : "+"
 //               } () >>
        | "*"
              << func() (Attrib, error) {
-                   return Node{"*", []string{}}, nil
+                   return ast.Node{"*", []string{}}, nil
              } () >>
        | "&"
              << func() (Attrib, error) {
-                   return Node{"&", []string{}}, nil
+                   return ast.Node{"&", []string{}}, nil
              } () >>
 //         | "<-"
 //               << func() (Attrib, error) {
@@ -964,7 +952,7 @@ UnaryOp : "+"
 //  PrimaryExpr Arguments .
 PrimaryExpr : Operand
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
 //             | Conversion
 //                 << func() (Attrib, error) {
@@ -973,13 +961,13 @@ PrimaryExpr : Operand
 //                 } () >>
             | PrimaryExpr Selector
                     << func() (Attrib, error) {
-                          varName := fmt.Sprintf("%s.%s", $0.(Node).place, $1.(Node).place)
+                          varName := fmt.Sprintf("%s.%s", $0.(ast.Node).Place, $1.(ast.Node).Place)
                           symTabEntry, found := SearchInScope(varName)
                           if found {
                                 if _, ok := globalSymTab[varName]; ok {
                                             return nil, errors.New(fmt.Sprintf("%s not in scope", varName) )
                                    } else {
-                                            return Node{symTabEntry[0], []string{}}, nil
+                                            return ast.Node{symTabEntry[0], []string{}}, nil
                                    }
                           } else {
                                  return nil, errors.New(fmt.Sprintf("%s not in scope", varName) )
@@ -988,12 +976,12 @@ PrimaryExpr : Operand
 
             | PrimaryExpr Index
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
-                        n.place = NewTmp()
+                        n := ast.Node{"", []string{}}
+                        n.Place = NewTmp()
                         // TODO: Write comment here.
-                        symTab[n.place] = []string{fmt.Sprintf("%s, %s", $0.(Node).place, $1.(Node).place), "array"}
-                        n.code = append(n.code, $1.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("from, %s, %s, %s", n.place, $0.(Node).place, $1.(Node).place))
+                        symTab[n.Place] = []string{fmt.Sprintf("%s, %s", $0.(ast.Node).Place, $1.(ast.Node).Place), "array"}
+                        n.Code = append(n.Code, $1.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("from, %s, %s, %s", n.Place, $0.(ast.Node).Place, $1.(ast.Node).Place))
                         return n, nil
                 } () >>
 //             | PrimaryExpr Slice
@@ -1009,25 +997,25 @@ PrimaryExpr : Operand
             | PrimaryExpr Arguments
                 // This is the production rule for a function call.
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
-                        typeName := globalSymTab[$0.(Node).place][0]
+                        n := ast.Node{"", $1.(ast.Node).Code}
+                        typeName := globalSymTab[$0.(ast.Node).Place][0]
                         var returnLength int
                         if len(typeName) >= 5 && typeName[:4] == "func" {
                                 returnLength, _ = strconv.Atoi(typeName[5:])
                         } else {
-                                return nil, errors.New(fmt.Sprintf("%s not a function", $0.(Node).place))
+                                return nil, errors.New(fmt.Sprintf("%s not a function", $0.(ast.Node).Place))
                         }
-                        argExpr := utils.SplitAndSanitize($1.(Node).place, ",")
+                        argExpr := utils.SplitAndSanitize($1.(ast.Node).Place, ",")
                         for k, v := range argExpr {
-                              n.code = append(n.code, fmt.Sprintf("=, %s.%d, %s", $0.(Node).place, k, v))
+                              n.Code = append(n.Code, fmt.Sprintf("=, %s.%d, %s", $0.(ast.Node).Place, k, v))
                         }
-                        n.code = append(n.code, fmt.Sprintf("call, %s", $0.(Node).place))
+                        n.Code = append(n.Code, fmt.Sprintf("call, %s", $0.(ast.Node).Place))
                         for k:=0 ; k < returnLength ; k++ {
-                                n.place = fmt.Sprintf("%s, return.%d", n.place, k)
+                                n.Place = fmt.Sprintf("%s, return.%d", n.Place, k)
                         }
 
-                        // n.code = append(n.code, fmt.Sprintf("store, %s", n.place))
-                        n.code = append(n.code, "\n")
+                        // n.Code = append(n.Code, fmt.Sprintf("store, %s", n.Place))
+                        n.Code = append(n.Code, "\n")
                         return n, nil
                 } () >>
             ;
@@ -1038,11 +1026,11 @@ PrimaryExpr : Operand
 // OperandName = identifier | QualifiedIdent.
 Operand : Literal
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
         | OperandName
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, []string{}}, nil
+                        return ast.Node{$0.(ast.Node).Place, []string{}}, nil
                 } () >>
 //         | "(" Expression ")"
 //                 << func() (Attrib, error) {
@@ -1053,11 +1041,11 @@ Operand : Literal
 
 Literal : BasicLit
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, []string{}}, nil
+                        return ast.Node{$0.(ast.Node).Place, []string{}}, nil
                 } () >>
         | CompositeLit
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
 //         | FunctionLit
 //                 << func() (Attrib, error) {
@@ -1068,7 +1056,7 @@ Literal : BasicLit
 
 BasicLit : intLit
                 << func() (Attrib, error) {
-                        return Node{string($0.(*token.Token).Lit), []string{}}, nil
+                        return ast.Node{string($0.(*token.Token).Lit), []string{}}, nil
                 } () >>
 //          | floatLit
 //                 << func() (Attrib, error) {
@@ -1082,7 +1070,7 @@ BasicLit : intLit
 //                 } () >>
          | stringLit
                 << func() (Attrib, error) {
-                        return Node{fmt.Sprintf("string:%s", string($0.(*token.Token).Lit)), []string{}}, nil
+                        return ast.Node{fmt.Sprintf("string:%s", string($0.(*token.Token).Lit)), []string{}}, nil
                 } () >>
 //          | boolLit
 //                << func() (Attrib, error) {
@@ -1105,27 +1093,27 @@ CompositeLit : LiteralType LiteralValue
                                 // NOTE: Structs don't support initialization of members
                                 // currently. All data members are initialized to default
                                 // values when a struct instance is defined.
-                                n := Node{$0.(Node).place, []string{}}
+                                n := ast.Node{$0.(ast.Node).Place, []string{}}
                                 // Check if the LiteralType corresponds to ArrayType.
                                 // This is done because unlike structs it is not required
                                 // to add a symbol table entry for place value of arrays
                                 // (which is of the form "array:<length_of_array>"), thus
                                 // returning early.
-                                typeName := $0.(Node).place
+                                typeName := $0.(ast.Node).Place
                                 if len(typeName) >= 5 && typeName[:5] == "array" {
                                         return n, nil
                                 }
                                 // In case the corresponds to a struct, add the
                                 // code for its data member initialization.
-                                symTabEntry, found := SearchInScope($0.(Node).place)
+                                symTabEntry, found := SearchInScope($0.(ast.Node).Place)
                                 if found {
                                         switch symTabEntry[0] {
                                         case "struct":
                                                 // The place value for struct is of the form -
                                                 //      struct:<number of members of struct>:<name of struct>
-                                                n.place = fmt.Sprintf("struct:%d:%s", (len(symTabEntry)-1) / 2, n.place)
-                                                litVals := utils.SplitAndSanitize($1.(Node).place, ",")
-                                                litValCodes := $1.(Node).code
+                                                n.Place = fmt.Sprintf("struct:%d:%s", (len(symTabEntry)-1) / 2, n.Place)
+                                                litVals := utils.SplitAndSanitize($1.(ast.Node).Place, ",")
+                                                litValCodes := $1.(ast.Node).Code
                                                 structInit := []string{}
                                                 // In case of integral (or any type) initializations, the corresponding
                                                 // lexeme is placed at the place value, justifying the length check which
@@ -1150,12 +1138,12 @@ CompositeLit : LiteralType LiteralValue
                                                 }
                                                 // When these code values will be utilized above, the litValCodes will be
                                                 // placed above the code corresponding to structInit (litVals can be expressions).
-                                                n.code = append(n.code, structInit...)
-                                                n.code = append(n.code, litValCodes...)
+                                                n.Code = append(n.Code, structInit...)
+                                                n.Code = append(n.Code, litValCodes...)
                                         }
                                 } else {
                                         // TODO: Update error message.
-                                        return nil, errors.New(fmt.Sprintf("%s not in scope", $0.(Node).place))
+                                        return nil, errors.New(fmt.Sprintf("%s not in scope", $0.(ast.Node).Place))
                                 }
                                 return n, nil
                         } () >>
@@ -1163,11 +1151,11 @@ CompositeLit : LiteralType LiteralValue
 
 LiteralType : ArrayType
                         << func() (Attrib, error) {
-                                return Node{$0.(Node).place, []string{}}, nil
+                                return ast.Node{$0.(ast.Node).Place, []string{}}, nil
                         } () >>
             // | StructType
             //             << func() (Attrib, error) {
-            //                     return Node{$0.(Node).place, []string{}}, nil
+            //                     return ast.Node{$0.(ast.Node).Place, []string{}}, nil
             //             } () >>
             // | "[" "..." "]" ElementType
 //                     << func() (Attrib, error) {
@@ -1188,48 +1176,48 @@ LiteralType : ArrayType
             // When initializing structs, TypeName will be used as the name of struct.
             | TypeName
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
             ;
 // TypeName  = identifier | QualifiedIdent .
 // QualifiedIdent = PackageName "." identifier .
 TypeName : identifier
                 << func() (Attrib, error) {
-                        return Node{string($0.(*token.Token).Lit), []string{}}, nil
+                        return ast.Node{string($0.(*token.Token).Lit), []string{}}, nil
                 } () >>
          // | type
          ;
 
 LiteralValue : "{" RepeatTerminator "}"
                         << func() (Attrib, error) {
-                                return Node{"", []string{}}, nil
+                                return ast.Node{"", []string{}}, nil
                         } () >>
              // NOTE: We don't support adding a ',' after the last KeyedElement
              // as opposed to the official go language.
              // TODO: Support for struct initialization.
              | "{" RepeatTerminator ElementList "}"
                         << func() (Attrib, error) {
-                                return Node{$2.(Node).place, $2.(Node).code}, nil
+                                return ast.Node{$2.(ast.Node).Place, $2.(ast.Node).Code}, nil
                         } () >>
              ;
 
 ElementList : KeyedElement RepeatKeyedElement
                 << func() (Attrib, error) {
-                        n := Node{fmt.Sprintf("%s, %s", $0.(Node).place, $1.(Node).place), $0.(Node).code}
-                        n.code = append(n.code, $1.(Node).code...)
+                        n := ast.Node{fmt.Sprintf("%s, %s", $0.(ast.Node).Place, $1.(ast.Node).Place), $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $1.(ast.Node).Code...)
                         return n, nil
                 } () >>
             ;
 
 RepeatKeyedElement : "," RepeatTerminator KeyedElement RepeatKeyedElement
                         << func() (Attrib, error) {
-                                n := Node{fmt.Sprintf("%s, %s", $2.(Node).place, $3.(Node).place), $2.(Node).code}
-                                n.code = append(n.code, $3.(Node).code...)
+                                n := ast.Node{fmt.Sprintf("%s, %s", $2.(ast.Node).Place, $3.(ast.Node).Place), $2.(ast.Node).Code}
+                                n.Code = append(n.Code, $3.(ast.Node).Code...)
                                 return n, nil
                         } () >>
                    | RepeatTerminator
                         << func() (Attrib, error) {
-                                return Node{"", []string{}}, nil
+                                return ast.Node{"", []string{}}, nil
                         } () >>
 //                    // | "," RepeatTerminator
 //                    //      << func() (Attrib, error) {
@@ -1245,7 +1233,7 @@ RepeatKeyedElement : "," RepeatTerminator KeyedElement RepeatKeyedElement
 
 KeyedElement : Element
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
 //              | Key ":" Element
 //                 << func() (Attrib, error) {
@@ -1280,7 +1268,7 @@ KeyedElement : Element
 
 Element : Expression
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
 //         | LiteralValue
 //                 << func() (Attrib, error) {
@@ -1299,14 +1287,14 @@ Element : Expression
 
 OperandName : identifier
                 << func() (Attrib, error) {
-                        // return Node{string($0.(*token.Token).Lit), []string{}}, nil
+                        // return ast.Node{string($0.(*token.Token).Lit), []string{}}, nil
                         varName := string($0.(*token.Token).Lit)
                         symTabEntry, found := SearchInScope(varName)
                         if found {
                         	if _, ok := globalSymTab[varName]; ok {
-                        		return Node{varName, []string{}}, nil
+                        		return ast.Node{varName, []string{}}, nil
                         	} else {
-                                        return Node{symTabEntry[0], []string{}}, nil
+                                        return ast.Node{symTabEntry[0], []string{}}, nil
                         	}
                         } else {
                         	return nil, errors.New(fmt.Sprintf("%s not declared", varName))
@@ -1323,13 +1311,13 @@ OperandName : identifier
 // // Conversion = Type "(" Expression [ "," ] ")"
 Selector : "." identifier
                 << func() (Attrib, error) {
-                        return Node{string($1.(*token.Token).Lit), []string{}}, nil
+                        return ast.Node{string($1.(*token.Token).Lit), []string{}}, nil
                 } () >>
          ;
 
 Index : "[" Expression "]"
                 << func() (Attrib, error) {
-                        return Node{$1.(Node).place, $1.(Node).code}, nil
+                        return ast.Node{$1.(ast.Node).Place, $1.(ast.Node).Code}, nil
                 } () >>
       ;
 
@@ -1377,11 +1365,11 @@ Index : "[" Expression "]"
 // arguments are supported for the time being.
 Arguments : "(" ")"
               << func() (Attrib, error) {
-                        return Node{"", []string{}}, nil
+                        return ast.Node{"", []string{}}, nil
                 } () >>
           | "(" ExpressionList ")"
                 << func() (Attrib, error) {
-                      return Node{$1.(Node).place, $1.(Node).code}, nil
+                      return ast.Node{$1.(ast.Node).Place, $1.(ast.Node).Code}, nil
                 } () >>
 //           | "(" ExpressionList "," ")"
 //                 << func() (Attrib, error) {
@@ -1460,8 +1448,8 @@ Arguments : "(" ")"
 // of the form "funcion not declared". A marker is introduced for the same.
 FunctionDecl : FunctionMarker FunctionBody
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $1.(Node).code...)
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $1.(ast.Node).Code...)
                         funcSymtabCreated = false // end of function block
                         // Return statement insertion will be handled when defer
                         // stack is emptied and the deferred calls are inserted.
@@ -1471,10 +1459,10 @@ FunctionDecl : FunctionMarker FunctionBody
                         }
                         for deferStack.Len > 0 {
                                 deferFuncCode := deferStack.Pop().(DeferStackItem)
-                                n.code = append(n.code, deferFuncCode...)
+                                n.Code = append(n.Code, deferFuncCode...)
                         }
                         if addRetStmt {
-                                n.code = append(n.code, fmt.Sprintf("ret,"))
+                                n.Code = append(n.Code, fmt.Sprintf("ret,"))
                         }
                         return n, nil
                 } () >>
@@ -1484,13 +1472,13 @@ FunctionDecl : FunctionMarker FunctionBody
 
 FunctionMarker : kwdFunc FunctionName Signature
                 << func() (Attrib, error) {
-                        n := Node{$1.(Node).place, []string{fmt.Sprintf("func, %s", $1.(Node).place)}}
+                        n := ast.Node{$1.(ast.Node).Place, []string{fmt.Sprintf("func, %s", $1.(ast.Node).Place)}}
                         // Assign values to arguments.
-                        for k, v := range $2.(Node).code {
-                                n.code = append(n.code, fmt.Sprintf("=, %s, %s.%d", v, $1.(Node).place, k))
+                        for k, v := range $2.(ast.Node).Code {
+                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s.%d", v, $1.(ast.Node).Place, k))
                         }
-                        if _, found := globalSymTab[$1.(Node).place]; !found {
-                                globalSymTab[$1.(Node).place] = []string{fmt.Sprintf("func:%s", $2.(Node).place)}
+                        if _, found := globalSymTab[$1.(ast.Node).Place]; !found {
+                                globalSymTab[$1.(ast.Node).Place] = []string{fmt.Sprintf("func:%s", $2.(ast.Node).Place)}
                         } else {
                                 return nil, errors.New(fmt.Sprintf("Function %s already declared\n", string($0.(*token.Token).Lit)))
                         }
@@ -1511,13 +1499,13 @@ Signature : Parameters
                       // Update the current symbol table to point to the newly
                       // created symbol table.
                       currSymTab = &childSymTab
-                      for _, v := range $0.(Node).code {
+                      for _, v := range $0.(ast.Node).Code {
                             if v == "" {
                                   break
                             }
                             currSymTab.varSymTab[v] = []string{v, "int"}
                       }
-                      return Node{"0", $0.(Node).code}, nil
+                      return ast.Node{"0", $0.(ast.Node).Code}, nil
                 } () >>
 
            | Parameters Result
@@ -1528,13 +1516,13 @@ Signature : Parameters
                        // Update the current symbol table to point to the newly
                        // created symbol table.
                        currSymTab = &childSymTab
-                       for _, v := range $0.(Node).code {
+                       for _, v := range $0.(ast.Node).Code {
                              if v == "" {
                                    break
                              }
                              currSymTab.varSymTab[v] = []string{v, "int"}
                        }
-                       return Node{fmt.Sprintf("%s", $1.(Node).place), $0.(Node).code}, nil
+                       return ast.Node{fmt.Sprintf("%s", $1.(ast.Node).Place), $0.(ast.Node).Code}, nil
                  } () >>
           ;
 
@@ -1542,16 +1530,16 @@ Result : Parameters
               << func() (Attrib, error) {
                     returnLength := 0
                     // finding number of return variable
-                    for _, v := range $0.(Node).code {
+                    for _, v := range $0.(ast.Node).Code {
                             if v == "int" {
                                     returnLength ++
                             }
                     }
-                    return Node{fmt.Sprintf("%d", returnLength), []string{}}, nil
+                    return ast.Node{fmt.Sprintf("%d", returnLength), []string{}}, nil
               } () >>
        | Type
               << func() (Attrib, error) {
-                    return Node{"1", []string{}}, nil
+                    return ast.Node{"1", []string{}}, nil
               } () >>
        ;
 
@@ -1559,41 +1547,41 @@ Result : Parameters
 // TODO: Parameters cannot end in ','
 Parameters : "(" RepeatTerminator ")"
                   << func() (Attrib, error) {
-                      return Node{"", []string{}}, nil
+                      return ast.Node{"", []string{}}, nil
                 } () >>
            | "(" ParameterList ")"
                 << func() (Attrib, error) {
-                      return Node{"", $1.(Node).code}, nil
+                      return ast.Node{"", $1.(ast.Node).Code}, nil
                 } () >>
            ;
 
 ParameterList : ParameterDecl RepeatParameterDecl
                 << func() (Attrib, error) {
-                      n := Node{"", $0.(Node).code}
-                      n.code = append(n.code, $1.(Node).code...)
+                      n := ast.Node{"", $0.(ast.Node).Code}
+                      n.Code = append(n.Code, $1.(ast.Node).Code...)
                       return n, nil
                 } () >>
               ;
 //
 RepeatParameterDecl : "," ParameterDecl RepeatParameterDecl
                         << func() (Attrib, error) {
-                              n := Node{"", $1.(Node).code}
-                              n.code = append(n.code, $2.(Node).code...)
+                              n := ast.Node{"", $1.(ast.Node).Code}
+                              n.Code = append(n.Code, $2.(ast.Node).Code...)
                               return n, nil
                         } () >>
                         | empty
                         << func() (Attrib, error) {
-                              return Node{"", []string{}}, nil
+                              return ast.Node{"", []string{}}, nil
                         } () >>
                     ;
 //
 ParameterDecl : IdentifierList Type
                 << func() (Attrib, error) {
-                      return Node{"", $0.(Node).code}, nil
+                      return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
                 | Type
                 << func() (Attrib, error) {
-                      return Node{"", []string{fmt.Sprintf("int")}}, nil
+                      return ast.Node{"", []string{fmt.Sprintf("int")}}, nil
                 } () >>
 //                 | "..." Type
 //                 << func() (Attrib, error) {
@@ -1613,7 +1601,7 @@ ParameterDecl : IdentifierList Type
 //             SliceType | MapType | ChannelType .
 Type : type
         << func() (Attrib, error) {
-              return Node{string($0.(*token.Token).Lit), []string{}}, nil
+              return ast.Node{string($0.(*token.Token).Lit), []string{}}, nil
         } () >>
 //       | identifier
 //         << func() (Attrib, error) {
@@ -1622,7 +1610,7 @@ Type : type
 //         } () >>
       | TypeLit
         << func() (Attrib, error) {
-              return Node{$0.(Node).place, $0.(Node).code}, nil
+              return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
         } () >>
 //       | "(" Type ")"
 //         << func() (Attrib, error) {
@@ -1633,7 +1621,7 @@ Type : type
 
 TypeLit : StructType
                 << func() (Attrib, error) {
-                        return Node{"struct", $0.(Node).code}, nil
+                        return ast.Node{"struct", $0.(ast.Node).Code}, nil
                 } () >>
         // | ArrayType
         // << func() (Attrib, error) {
@@ -1663,7 +1651,7 @@ TypeLit : StructType
 ArrayType : "[" ArrayLength "]" ElementType
                 << func() (Attrib, error) {
                         // TODO: ElementType is taken to be only int for now.
-                        return Node{fmt.Sprintf("array:%s", $1.(Node).place), []string{}}, nil
+                        return ast.Node{fmt.Sprintf("array:%s", $1.(ast.Node).Place), []string{}}, nil
                 } () >>
           ;
 
@@ -1671,13 +1659,13 @@ ArrayType : "[" ArrayLength "]" ElementType
 // an expression.
 ArrayLength : intLit
                 << func() (Attrib, error) {
-                        return Node{string($0.(*token.Token).Lit), []string{}}, nil
+                        return ast.Node{string($0.(*token.Token).Lit), []string{}}, nil
                 } () >>
             ;
 
 ElementType : Type
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, []string{}}, nil
+                        return ast.Node{$0.(ast.Node).Place, []string{}}, nil
                 } () >>
             ;
 
@@ -1687,28 +1675,28 @@ ElementType : Type
 // Tag           = string_lit .
 StructType : kwdStruct RepeatTerminator "{" RepeatTerminator RepeatFieldDecl "}"
                 << func() (Attrib, error) {
-                        return Node{"", $4.(Node).code}, nil
+                        return ast.Node{"", $4.(ast.Node).Code}, nil
                 } () >>
            ;
 
 RepeatFieldDecl : FieldDecl terminator RepeatTerminator RepeatFieldDecl
                         << func() (Attrib, error) {
-                                n := Node{"", $0.(Node).code}
-                                n.code = append(n.code, $3.(Node).code...)
+                                n := ast.Node{"", $0.(ast.Node).Code}
+                                n.Code = append(n.Code, $3.(ast.Node).Code...)
                                 return n, nil
                         } () >>
                 | FieldDecl RepeatTerminator
                         << func() (Attrib, error) {
-                                return Node{"", $0.(Node).code}, nil
+                                return ast.Node{"", $0.(ast.Node).Code}, nil
                         } () >>
                 ;
 
 FieldDecl : IdentifierList Type
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
-                        for _, v := range $0.(Node).code {
-                                n.code = append(n.code, v)
-                                n.code = append(n.code, $1.(Node).place)
+                        n := ast.Node{"", []string{}}
+                        for _, v := range $0.(ast.Node).Code {
+                                n.Code = append(n.Code, v)
+                                n.Code = append(n.Code, $1.(ast.Node).Place)
                         }
                         return n, nil
                 } () >>
@@ -1729,7 +1717,7 @@ FieldDecl : IdentifierList Type
 //                 } () >>
           | empty
                 << func() (Attrib, error) {
-                        return Node{"", []string{}}, nil
+                        return ast.Node{"", []string{}}, nil
                 } () >>
           ;
 
@@ -1792,7 +1780,7 @@ FieldDecl : IdentifierList Type
 // IdentifierList = identifier { "," identifier } .
 IdentifierList : identifier
                         << func() (Attrib, error) {
-                                return Node{"", []string{string($0.(*token.Token).Lit)}}, nil
+                                return ast.Node{"", []string{string($0.(*token.Token).Lit)}}, nil
                         } () >>
                | identifier "," IdentifierList
                         << func() (Attrib, error) {
@@ -1800,8 +1788,8 @@ IdentifierList : identifier
                                 // are appended to the slice for code to avoid adding
                                 // comma-separated string in place since the identifiers
                                 // don't have any IR code to be added.
-                                n := Node{"", []string{string($0.(*token.Token).Lit)}}
-                                n.code = append(n.code, $2.(Node).code...)
+                                n := ast.Node{"", []string{string($0.(*token.Token).Lit)}}
+                                n.Code = append(n.Code, $2.(ast.Node).Code...)
                                 return n, nil
                         } () >>
                ;
@@ -1811,13 +1799,13 @@ FunctionName : identifier
                         // The symbol table entry for a function is of the form -
                         //      functionName : ["func", (rest of the values are yet to be decided)]
 
-                        return Node{string($0.(*token.Token).Lit), []string{}}, nil
+                        return ast.Node{string($0.(*token.Token).Lit), []string{}}, nil
                  } () >>
               ;
 
 FunctionBody : Block
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
              ;
 
@@ -1827,13 +1815,13 @@ RepeatTerminator : terminator RepeatTerminator
 
 StatementList : Statement terminator RepeatTerminator StatementList
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $3.(Node).code...)
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $3.(ast.Node).Code...)
                         return n, nil
                 } () >>
               | Statement RepeatTerminator
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
               ;
 
@@ -1845,60 +1833,60 @@ StatementList : Statement terminator RepeatTerminator StatementList
 // PrintIntStmt
 Statement : Declaration
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | LabeledStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | SimpleStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | ReturnStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | BreakStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | ContinueStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | GotoStmt
                 << func() (Attrib, error) {
-                       return Node{"", $0.(Node).code}, nil
+                       return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           // TODO: FallthroughStmt is not supported currently.
           | Block
                 << func() (Attrib, error) {
-                       return Node{"", $0.(Node).code}, nil
+                       return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | IfStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | SwitchStmt
                 << func() (Attrib, error) {
-                       return Node{"", $0.(Node).code}, nil
+                       return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | ForStmt
                 << func() (Attrib, error) {
-                       return Node{"", $0.(Node).code}, nil
+                       return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | DeferStmt
                 << func() (Attrib, error) {
-                       return Node{"", $0.(Node).code}, nil
+                       return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | PrintStmt
                 << func() (Attrib, error) {
-                       return Node{"", $0.(Node).code}, nil
+                       return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | ScanStmt
                 << func() (Attrib, error) {
-                       return Node{"", $0.(Node).code}, nil
+                       return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           ;
 
@@ -1906,8 +1894,8 @@ Statement : Declaration
 // Label       = identifier .
 LabeledStmt : Label ":" RepeatTerminator Statement
                 << func() (Attrib, error) {
-                        n := Node{"", []string{fmt.Sprintf("label, %s", $0.(Node).place)}}
-                        n.code = append(n.code, $3.(Node).code...)
+                        n := ast.Node{"", []string{fmt.Sprintf("label, %s", $0.(ast.Node).Place)}}
+                        n.Code = append(n.Code, $3.(ast.Node).Code...)
                         return n, nil
                 } () >>
             ;
@@ -1921,23 +1909,23 @@ LabeledStmt : Label ":" RepeatTerminator Statement
 // ShortVarDecl = IdentifierList ":=" ExpressionList .
 SimpleStmt : EmptyStmt
                 << func() (Attrib, error) {
-                        return Node{"", []string{}}, nil
+                        return ast.Node{"", []string{}}, nil
                 } () >>
            | Assignment
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
            | ShortVarDecl
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
            | IncDecStmt
                 << func() (Attrib, error) {
-                       return Node{"", $0.(Node).code}, nil
+                       return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
            | ExpressionStmt
                 << func() (Attrib, error) {
-                      return Node{$0.(Node).place, $0.(Node).code}, nil
+                      return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
         ;
 //            | Assignment
@@ -1968,21 +1956,21 @@ ReturnStmt : kwdRet
                         if deferStack.Len > 0 {
                                 // Return statement insertion will be handled when defer
                                 // stack is emptied and the deferred calls are inserted.
-                                return Node{"", []string{}}, nil
+                                return ast.Node{"", []string{}}, nil
                         } else {
-                                return Node{"", []string{"ret,"}}, nil
+                                return ast.Node{"", []string{"ret,"}}, nil
                         }
                 } () >>
            | kwdRet ExpressionList
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
+                        n := ast.Node{"", []string{}}
                         if deferStack.Len == 0 {
-                                retExpr := utils.SplitAndSanitize($1.(Node).place, ",")
-                                n.code = append(n.code, $1.(Node).code...)
+                                retExpr := utils.SplitAndSanitize($1.(ast.Node).Place, ",")
+                                n.Code = append(n.Code, $1.(ast.Node).Code...)
                                 for k, v := range retExpr {
-                                      n.code = append(n.code, fmt.Sprintf("=, return.%d, %s", k, v))
+                                      n.Code = append(n.Code, fmt.Sprintf("=, return.%d, %s", k, v))
                                 }
-                                n.code = append(n.code, fmt.Sprintf("ret,"))
+                                n.Code = append(n.Code, fmt.Sprintf("ret,"))
                         }
                         return n, nil
                 } () >>
@@ -1991,18 +1979,18 @@ ReturnStmt : kwdRet
 // BreakStmt = "break" [ Label ] .
 BreakStmt : kwdBreak
                 << func() (Attrib, error) {
-                        return Node{"", []string{"break"}}, nil
+                        return ast.Node{"", []string{"break"}}, nil
                 } () >>
           | kwdBreak Label
                 << func() (Attrib, error) {
-                        return Node{"", []string{fmt.Sprintf("j, %s", $1.(Node).place)}}, nil
+                        return ast.Node{"", []string{fmt.Sprintf("j, %s", $1.(ast.Node).Place)}}, nil
                 } () >>
           ;
 
 // ContinueStmt = "continue" [ Label ] .
 ContinueStmt : kwdContinue
                 << func() (Attrib, error) {
-                        return Node{"", []string{"continue"}}, nil
+                        return ast.Node{"", []string{"continue"}}, nil
                 } () >>
              // TODO: `continue label` vs `break label` ??
              // | kwdContinue Label
@@ -2015,7 +2003,7 @@ ContinueStmt : kwdContinue
 // GotoStmt = "goto" Label .
 GotoStmt : kwdGoto Label
                 << func() (Attrib, error) {
-                        return Node{"", []string{fmt.Sprintf("j, %s", $1.(Node).place)}}, nil
+                        return ast.Node{"", []string{fmt.Sprintf("j, %s", $1.(ast.Node).Place)}}, nil
                 } () >>
          ;
 
@@ -2023,7 +2011,7 @@ Block : "{" Marker RepeatTerminator StatementList "}"
                 << func() (Attrib, error) {
                         // start of block
                         currSymTab = currSymTab.parent // end of block
-                        return Node{"", $3.(Node).code}, nil
+                        return ast.Node{"", $3.(ast.Node).Code}, nil
                 } () >>
       ;
 
@@ -2051,77 +2039,77 @@ Marker : empty
 // IfStmt = "if" [ SimpleStmt ";" ] Expression Block [ "else" ( IfStmt | Block ) ] .
 IfStmt : kwdIf Expression Block
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
+                        n := ast.Node{"", $1.(ast.Node).Code}
                         afterLabel := NewLabel()
-                        n.code = append(n.code, fmt.Sprintf("blt, %s, %s, 1", afterLabel, $1.(Node).place))
-                        n.code = append(n.code, $2.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
-                        n.code = append(n.code, "\n")
+                        n.Code = append(n.Code, fmt.Sprintf("blt, %s, %s, 1", afterLabel, $1.(ast.Node).Place))
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, "\n")
                         return n, nil
                 } () >>
         | kwdIf Expression Block kwdElse Block
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
+                        n := ast.Node{"", $1.(ast.Node).Code}
                         elseLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.code = append(n.code, fmt.Sprintf("blt, %s, %s, 1", elseLabel, $1.(Node).place))
-                        n.code = append(n.code, $2.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", elseLabel))
-                        n.code = append(n.code, $4.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("blt, %s, %s, 1", elseLabel, $1.(ast.Node).Place))
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", elseLabel))
+                        n.Code = append(n.Code, $4.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
         | kwdIf Expression Block kwdElse IfStmt
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
+                        n := ast.Node{"", $1.(ast.Node).Code}
                         elseLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.code = append(n.code, fmt.Sprintf("blt, %s, %s, 1", elseLabel, $1.(Node).place))
-                        n.code = append(n.code, $2.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", elseLabel))
-                        n.code = append(n.code, $4.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("blt, %s, %s, 1", elseLabel, $1.(ast.Node).Place))
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", elseLabel))
+                        n.Code = append(n.Code, $4.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
        | kwdIf SimpleStmt terminator Expression Block
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
+                        n := ast.Node{"", $1.(ast.Node).Code}
                         afterLabel := NewLabel()
-                        n.code = append(n.code, $3.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("blt, %s, %s, 1", afterLabel, $3.(Node).place))
-                        n.code = append(n.code, $4.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, $3.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("blt, %s, %s, 1", afterLabel, $3.(ast.Node).Place))
+                        n.Code = append(n.Code, $4.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
        | kwdIf SimpleStmt terminator Expression Block kwdElse IfStmt
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
+                        n := ast.Node{"", $1.(ast.Node).Code}
                         elseLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.code = append(n.code, $3.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("blt, %s, %s, 1", elseLabel, $3.(Node).place))
-                        n.code = append(n.code, $4.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", elseLabel))
-                        n.code = append(n.code, $6.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, $3.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("blt, %s, %s, 1", elseLabel, $3.(ast.Node).Place))
+                        n.Code = append(n.Code, $4.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", elseLabel))
+                        n.Code = append(n.Code, $6.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
 
                 } () >>
         | kwdIf SimpleStmt terminator Expression Block kwdElse Block
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
+                        n := ast.Node{"", $1.(ast.Node).Code}
                         elseLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.code = append(n.code, $3.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("blt, %s, %s, 1", elseLabel, $3.(Node).place))
-                        n.code = append(n.code, $4.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", elseLabel))
-                        n.code = append(n.code, $6.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, $3.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("blt, %s, %s, 1", elseLabel, $3.(ast.Node).Place))
+                        n.Code = append(n.Code, $4.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", elseLabel))
+                        n.Code = append(n.Code, $6.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
        ;
@@ -2129,7 +2117,7 @@ IfStmt : kwdIf Expression Block
 // SwitchStmt = ExprSwitchStmt | TypeSwitchStmt .
 SwitchStmt : ExprSwitchStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
 //            | TypeSwitchStmt
 //                << func() (Attrib, error) {
@@ -2143,13 +2131,13 @@ SwitchStmt : ExprSwitchStmt
 // ExprSwitchCase = "case" ExpressionList | "default" .
         ExprSwitchStmt : kwdSwitch Expression "{" RepeatTerminator RepeatExprCaseClause "}"
                         << func() (Attrib, error) {
-                                n := Node{"", $1.(Node).code}
+                                n := ast.Node{"", $1.(ast.Node).Code}
                                 caseLabels := []string{}
-                                caseStmts := $4.(Node).code
+                                caseStmts := $4.(ast.Node).Code
                                 // SplitAndSanitize cannot be used here as removal of empty
                                 // entries seems to be causing erroneous index calculations.
                                 // Regression caused in "test/codegen/switch.go".
-                                caseTemporaries := strings.Split($4.(Node).place, ",")
+                                caseTemporaries := strings.Split($4.(ast.Node).Place, ",")
                                 afterLabel := NewLabel()
                                 defaultLabel := afterLabel
                                 // The last value in caseTemporaries will be the place value
@@ -2158,20 +2146,20 @@ SwitchStmt : ExprSwitchStmt
                                 for k, v := range caseTemporaries[:len(caseTemporaries)-1] {
                                         caseLabel := NewLabel()
                                         caseLabels = append(caseLabels, caseLabel)
-                                        n.code = append(n.code, caseStmts[2*k])
+                                        n.Code = append(n.Code, caseStmts[2*k])
                                         if strings.TrimSpace(v) == "default" {
                                                 defaultLabel = caseLabel
                                         } else {
-                                                n.code = append(n.code, fmt.Sprintf("beq, %s, %s, %s", caseLabel, $1.(Node).place, v))
+                                                n.Code = append(n.Code, fmt.Sprintf("beq, %s, %s, %s", caseLabel, $1.(ast.Node).Place, v))
                                         }
                                 }
-                                n.code = append(n.code, fmt.Sprintf("j, %s", defaultLabel))
+                                n.Code = append(n.Code, fmt.Sprintf("j, %s", defaultLabel))
                                 for k, v := range caseLabels {
-                                        n.code = append(n.code, fmt.Sprintf("label, %s", v))
-                                        n.code = append(n.code, caseStmts[2*k+1])
-                                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
+                                        n.Code = append(n.Code, fmt.Sprintf("label, %s", v))
+                                        n.Code = append(n.Code, caseStmts[2*k+1])
+                                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
                                 }
-                                n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                                n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                                 return n, nil
                         } () >>
                   // TODO: Handle empty expression
@@ -2194,14 +2182,14 @@ SwitchStmt : ExprSwitchStmt
 
 RepeatExprCaseClause : ExprCaseClause RepeatExprCaseClause
                         << func() (Attrib, error) {
-                                n := Node{"", $0.(Node).code}
-                                n.code = append(n.code, $1.(Node).code...)
-                                n.place = fmt.Sprintf("%s, %s", $0.(Node).place, $1.(Node).place)
+                                n := ast.Node{"", $0.(ast.Node).Code}
+                                n.Code = append(n.Code, $1.(ast.Node).Code...)
+                                n.Place = fmt.Sprintf("%s, %s", $0.(ast.Node).Place, $1.(ast.Node).Place)
                                 return n, nil
                         } () >>
                      | empty
                         << func() (Attrib, error) {
-                                return Node{"", []string{}}, nil
+                                return ast.Node{"", []string{}}, nil
                         } () >>
                      ;
 
@@ -2209,19 +2197,19 @@ RepeatExprCaseClause : ExprCaseClause RepeatExprCaseClause
 // ExprSwitchCase = "case" ExpressionList | "default" .
 ExprCaseClause : ExprSwitchCase ":" RepeatTerminator StatementList
                         << func() (Attrib, error) {
-                                n := Node{$0.(Node).place, []string{}}
+                                n := ast.Node{$0.(ast.Node).Place, []string{}}
                                 exprCode := ""
-                                for _, v := range $0.(Node).code {
+                                for _, v := range $0.(ast.Node).Code {
                                         exprCode += v
                                         exprCode += "\n"
                                 }
-                                n.code = append(n.code, exprCode)
+                                n.Code = append(n.Code, exprCode)
                                 stmtCode := ""
-                                for _, v := range $3.(Node).code {
+                                for _, v := range $3.(ast.Node).Code {
                                         stmtCode += v
                                         stmtCode += "\n"
                                 }
-                                n.code = append(n.code, stmtCode)
+                                n.Code = append(n.Code, stmtCode)
                                 return n, nil
                         } () >>
                ;
@@ -2231,11 +2219,11 @@ ExprCaseClause : ExprSwitchCase ":" RepeatTerminator StatementList
 // ExprSwitchCase : kwdCase ExpressionList
 ExprSwitchCase : kwdCase Expression
                         << func() (Attrib, error) {
-                                return Node{$1.(Node).place, $1.(Node).code}, nil
+                                return ast.Node{$1.(ast.Node).Place, $1.(ast.Node).Code}, nil
                         } () >>
                | kwdDefault
                         << func() (Attrib, error) {
-                                return Node{"default", []string{}}, nil
+                                return ast.Node{"default", []string{}}, nil
                         } () >>
                ;
 //
@@ -2322,68 +2310,68 @@ ExprSwitchCase : kwdCase Expression
 // Condition = Expression .
 ForStmt : kwdFor Block
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
+                        n := ast.Node{"", []string{}}
                         startLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.code = append(n.code, fmt.Sprintf("label, %s", startLabel))
-                        for _, v := range $1.(Node).code {
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", startLabel))
+                        for _, v := range $1.(ast.Node).Code {
                                 v := strings.TrimSpace(v)
                                 if v == "break" {
-                                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
+                                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
                                 } else if v == "continue" {
-                                        n.code = append(n.code, fmt.Sprintf("j, %s", startLabel))
+                                        n.Code = append(n.Code, fmt.Sprintf("j, %s", startLabel))
                                 } else {
-                                        n.code = append(n.code, v)
+                                        n.Code = append(n.Code, v)
                                 }
                         }
-                        n.code = append(n.code, fmt.Sprintf("j, %s", startLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", startLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
         | kwdFor Condition Block
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
+                        n := ast.Node{"", []string{}}
                         startLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.code = append(n.code, fmt.Sprintf("label, %s", startLabel))
-                        n.code = append(n.code, $1.(Node).code...)
-                        n.code = append(n.code, fmt.Sprintf("blt, %s, %s, 1", afterLabel, $1.(Node).place))
-                        for _, v := range $2.(Node).code {
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", startLabel))
+                        n.Code = append(n.Code, $1.(ast.Node).Code...)
+                        n.Code = append(n.Code, fmt.Sprintf("blt, %s, %s, 1", afterLabel, $1.(ast.Node).Place))
+                        for _, v := range $2.(ast.Node).Code {
                                 v := strings.TrimSpace(v)
                                 if v == "break" {
-                                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
+                                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
                                 } else if v == "continue" {
-                                        n.code = append(n.code, fmt.Sprintf("j, %s", startLabel))
+                                        n.Code = append(n.Code, fmt.Sprintf("j, %s", startLabel))
                                 } else {
-                                        n.code = append(n.code, v)
+                                        n.Code = append(n.Code, v)
                                 }
                         }
-                        n.code = append(n.code, fmt.Sprintf("j, %s", startLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", startLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
         | kwdFor ForClause Block
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
+                        n := ast.Node{"", []string{}}
                         startLabel := NewLabel()
                         afterLabel := NewLabel()
-                        n.code = append(n.code, $1.(Node).code[0]) // init statement
-                        n.code = append(n.code, fmt.Sprintf("label, %s", startLabel))
-                        n.code = append(n.code, $1.(Node).code[1]) // condition
-                        n.code = append(n.code, fmt.Sprintf("blt, %s, %s, 1", afterLabel, $1.(Node).place))
-                        for _, v := range $2.(Node).code {
+                        n.Code = append(n.Code, $1.(ast.Node).Code[0]) // init statement
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", startLabel))
+                        n.Code = append(n.Code, $1.(ast.Node).Code[1]) // condition
+                        n.Code = append(n.Code, fmt.Sprintf("blt, %s, %s, 1", afterLabel, $1.(ast.Node).Place))
+                        for _, v := range $2.(ast.Node).Code {
                                 v := strings.TrimSpace(v)
                                 if v == "break" {
-                                        n.code = append(n.code, fmt.Sprintf("j, %s", afterLabel))
+                                        n.Code = append(n.Code, fmt.Sprintf("j, %s", afterLabel))
                                 } else if v == "continue" {
-                                        n.code = append(n.code, fmt.Sprintf("j, %s", startLabel))
+                                        n.Code = append(n.Code, fmt.Sprintf("j, %s", startLabel))
                                 } else {
-                                        n.code = append(n.code, v)
+                                        n.Code = append(n.Code, v)
                                 }
                         }
-                        n.code = append(n.code, $1.(Node).code[2]) // post statement
-                        n.code = append(n.code, fmt.Sprintf("j, %s", startLabel))
-                        n.code = append(n.code, fmt.Sprintf("label, %s", afterLabel))
+                        n.Code = append(n.Code, $1.(ast.Node).Code[2]) // post statement
+                        n.Code = append(n.Code, fmt.Sprintf("j, %s", startLabel))
+                        n.Code = append(n.Code, fmt.Sprintf("label, %s", afterLabel))
                         return n, nil
                 } () >>
 //         | kwdFor RangeClause Block
@@ -2423,114 +2411,114 @@ ForClause : terminator terminator
               << func() (Attrib, error) {
                       // When Condition is not specified, do an endless loop by
                       // initializing the place value to 1.
-                      return Node{"1", []string{"", "", ""}}, nil
+                      return ast.Node{"1", []string{"", "", ""}}, nil
               } () >>
           | InitStmt terminator terminator
               << func() (Attrib, error) {
                         initStmtCode := ""
-                        for _, v := range $0.(Node).code {
+                        for _, v := range $0.(ast.Node).Code {
                                 initStmtCode += v
                                 initStmtCode += "\n"
                         }
-                        return Node{"1", []string{initStmtCode, "", ""}}, nil
+                        return ast.Node{"1", []string{initStmtCode, "", ""}}, nil
               } () >>
           | terminator Condition terminator
               << func() (Attrib, error) {
                         condCode := ""
-                        for _, v := range $1.(Node).code {
+                        for _, v := range $1.(ast.Node).Code {
                                 condCode += v
                                 condCode += "\n"
                         }
-                        return Node{$1.(Node).place, []string{"", condCode, ""}}, nil
+                        return ast.Node{$1.(ast.Node).Place, []string{"", condCode, ""}}, nil
               } () >>
           | terminator terminator PostStmt
               << func() (Attrib, error) {
                         postStmtCode := ""
-                        for _, v := range $2.(Node).code {
+                        for _, v := range $2.(ast.Node).Code {
                                 postStmtCode += v
                                 postStmtCode += "\n"
                         }
-                        return Node{"1", []string{"", "", postStmtCode}}, nil
+                        return ast.Node{"1", []string{"", "", postStmtCode}}, nil
               } () >>
           | InitStmt terminator Condition terminator
               << func() (Attrib, error) {
                         initStmtCode := ""
-                        for _, v := range $0.(Node).code {
+                        for _, v := range $0.(ast.Node).Code {
                                 initStmtCode += v
                                 initStmtCode += "\n"
                         }
                         condCode := ""
-                        for _, v := range $2.(Node).code {
+                        for _, v := range $2.(ast.Node).Code {
                                 condCode += v
                                 condCode += "\n"
                         }
-                        return Node{$2.(Node).place, []string{initStmtCode, condCode, ""}}, nil
+                        return ast.Node{$2.(ast.Node).Place, []string{initStmtCode, condCode, ""}}, nil
               } () >>
           | InitStmt terminator terminator PostStmt
               << func() (Attrib, error) {
                         initStmtCode := ""
-                        for _, v := range $0.(Node).code {
+                        for _, v := range $0.(ast.Node).Code {
                                 initStmtCode += v
                                 initStmtCode += "\n"
                         }
                         postStmtCode := ""
-                        for _, v := range $3.(Node).code {
+                        for _, v := range $3.(ast.Node).Code {
                                 postStmtCode += v
                                 postStmtCode += "\n"
                         }
-                        return Node{"1", []string{initStmtCode, "", postStmtCode}}, nil
+                        return ast.Node{"1", []string{initStmtCode, "", postStmtCode}}, nil
               } () >>
           | terminator Condition terminator PostStmt
               << func() (Attrib, error) {
                         condCode := ""
-                        for _, v := range $1.(Node).code {
+                        for _, v := range $1.(ast.Node).Code {
                                 condCode += v
                                 condCode += "\n"
                         }
                         postStmtCode := ""
-                        for _, v := range $3.(Node).code {
+                        for _, v := range $3.(ast.Node).Code {
                                 postStmtCode += v
                                 postStmtCode += "\n"
                         }
-                        return Node{$1.(Node).place, []string{"", condCode, postStmtCode}}, nil
+                        return ast.Node{$1.(ast.Node).Place, []string{"", condCode, postStmtCode}}, nil
               } () >>
           | InitStmt terminator Condition terminator PostStmt
               << func() (Attrib, error) {
                         initStmtCode := ""
-                        for _, v := range $0.(Node).code {
+                        for _, v := range $0.(ast.Node).Code {
                                 initStmtCode += v
                                 initStmtCode += "\n"
                         }
                         condCode := ""
-                        for _, v := range $2.(Node).code {
+                        for _, v := range $2.(ast.Node).Code {
                                 condCode += v
                                 condCode += "\n"
                         }
                         postStmtCode := ""
-                        for _, v := range $4.(Node).code {
+                        for _, v := range $4.(ast.Node).Code {
                                 postStmtCode += v
                                 postStmtCode += "\n"
                         }
-                        return Node{$2.(Node).place, []string{initStmtCode, condCode, postStmtCode}}, nil
+                        return ast.Node{$2.(ast.Node).Place, []string{initStmtCode, condCode, postStmtCode}}, nil
               } () >>
           ;
 
 InitStmt : SimpleStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
          ;
 
 PostStmt : SimpleStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
          ;
 
 // FIXME: Condition can only be a binary expression.
 Condition : Expression
                 << func() (Attrib, error) {
-                        return Node{$0.(Node).place, $0.(Node).code}, nil
+                        return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
           ;
 
@@ -2539,16 +2527,16 @@ Condition : Expression
 DeferStmt : "defer" PrimaryExpr Arguments
                 << func() (Attrib, error) {
                         // Add code corresponding to the arguments.
-                        n := Node{"", $2.(Node).code}
-                        argExpr := utils.SplitAndSanitize($2.(Node).place, ",")
+                        n := ast.Node{"", $2.(ast.Node).Code}
+                        argExpr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
                         for k, v := range argExpr {
-                              n.code = append(n.code, fmt.Sprintf("=, %s.%d, %s", $1.(Node).place, k, v))
+                              n.Code = append(n.Code, fmt.Sprintf("=, %s.%d, %s", $1.(ast.Node).Place, k, v))
                         }
-                        n.place = NewTmp()
+                        n.Place = NewTmp()
                         // The code for the actual function call needs to be pushed to the defer stack.
                         deferCode := make(DeferStackItem, 0)
-                        deferCode = append(deferCode, fmt.Sprintf("call, %s", $1.(Node).place))
-                        deferCode = append(deferCode, fmt.Sprintf("store, %s", n.place))
+                        deferCode = append(deferCode, fmt.Sprintf("call, %s", $1.(ast.Node).Place))
+                        deferCode = append(deferCode, fmt.Sprintf("store, %s", n.Place))
                         deferStack.Push(deferCode)
                         return n, nil
                 } () >>
@@ -2556,60 +2544,60 @@ DeferStmt : "defer" PrimaryExpr Arguments
 
 PrintStmt : PrintIntStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           | PrintStrStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           ;
 
 ScanStmt : ScanIntStmt
                 << func() (Attrib, error) {
-                        return Node{"", $0.(Node).code}, nil
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
                 } () >>
           ;
 
 PrintIntStmt : "printInt" Expression
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
-                        n.code = append(n.code, fmt.Sprintf("printInt, %s, %s", $1.(Node).place, $1.(Node).place))
+                        n := ast.Node{"", $1.(ast.Node).Code}
+                        n.Code = append(n.Code, fmt.Sprintf("printInt, %s, %s", $1.(ast.Node).Place, $1.(ast.Node).Place))
                         return n, nil
                 } () >>
              ;
 
 PrintStrStmt : "printStr" Expression
                 << func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
-                        n.code = append(n.code, fmt.Sprintf("printStr, %s", $1.(Node).place))
+                        n := ast.Node{"", $1.(ast.Node).Code}
+                        n.Code = append(n.Code, fmt.Sprintf("printStr, %s", $1.(ast.Node).Place))
                         return n, nil
                 } () >>
              ;
 
 ScanIntStmt : "scanInt" Expression
 		<< func() (Attrib, error) {
-                        n := Node{"", $1.(Node).code}
-                        n.code = append(n.code, fmt.Sprintf("scanInt, %s", $1.(Node).place))
+                        n := ast.Node{"", $1.(ast.Node).Code}
+                        n.Code = append(n.Code, fmt.Sprintf("scanInt, %s", $1.(ast.Node).Place))
                         return n, nil
                } () >>
             ;
 
 ExpressionStmt : Expression
                 << func() (Attrib, error) {
-                      return Node{$0.(Node).place, $0.(Node).code}, nil
+                      return ast.Node{$0.(ast.Node).Place, $0.(ast.Node).Code}, nil
                 } () >>
                ;
 
 IncDecStmt : Expression "++"
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, fmt.Sprintf("+, %s, %s, 1", $0.(Node).place, $0.(Node).place))
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, fmt.Sprintf("+, %s, %s, 1", $0.(ast.Node).Place, $0.(ast.Node).Place))
                         return n, nil
                 } () >>
            | Expression "--"
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, fmt.Sprintf("-, %s, %s, 1", $0.(Node).place, $0.(Node).place))
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, fmt.Sprintf("-, %s, %s, 1", $0.(ast.Node).Place, $0.(ast.Node).Place))
                         return n, nil
                 } () >>
            ;
@@ -2617,12 +2605,12 @@ IncDecStmt : Expression "++"
 Assignment : ExpressionList assignOp ExpressionList
                 << func() (Attrib, error) {
                         op := string($1.(*token.Token).Lit)[0]
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
-                        leftExpr := utils.SplitAndSanitize($0.(Node).place, ",")
-                        rightExpr := utils.SplitAndSanitize($2.(Node).place, ",")
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        leftExpr := utils.SplitAndSanitize($0.(ast.Node).Place, ",")
+                        rightExpr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
                         for k, v := range leftExpr {
-                                n.code = append(n.code, fmt.Sprintf("%s, %s, %s, %s", op, v, v, rightExpr[k]))
+                                n.Code = append(n.Code, fmt.Sprintf("%s, %s, %s, %s", op, v, v, rightExpr[k]))
                                 _, ok := symTab[v]
                                 if ok {
                                         if symTab[v][1] == "array" {
@@ -2630,7 +2618,7 @@ Assignment : ExpressionList assignOp ExpressionList
                                                 // arrayInfo contains the following info -
                                                 //      0th index: array name
                                                 //      1st index: array index
-                                                n.code = append(n.code, fmt.Sprintf("into, %s, %s, %s, %s", arrayInfo[0], arrayInfo[0], arrayInfo[1], v))
+                                                n.Code = append(n.Code, fmt.Sprintf("into, %s, %s, %s, %s", arrayInfo[0], arrayInfo[0], arrayInfo[1], v))
                                         }
                                 }
                         }
@@ -2639,10 +2627,10 @@ Assignment : ExpressionList assignOp ExpressionList
            // TODO : Redundant code
            | ExpressionList "=" ExpressionList
                 << func() (Attrib, error) {
-                        n := Node{"", $0.(Node).code}
-                        n.code = append(n.code, $2.(Node).code...)
-                        leftExpr := utils.SplitAndSanitize($0.(Node).place, ",")
-                        rightExpr := utils.SplitAndSanitize($2.(Node).place, ",")
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        leftExpr := utils.SplitAndSanitize($0.(ast.Node).Place, ",")
+                        rightExpr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
                         if len(leftExpr) != len(rightExpr) {
                                 return nil, errors.New("Number of values in LHS and RHS is not equal")
                         }
@@ -2654,20 +2642,20 @@ Assignment : ExpressionList assignOp ExpressionList
                                                 currSymTab.varSymTab[GetRealName(v)][3] = currSymTab.varSymTab[GetRealName(rightExpr[k])][3]
                                         }
                                 } else if len(rightExpr[k]) >= 5 && rightExpr[k][:5] == "deref" && len(v) >= 5 && v[:5] == "deref" {
-                                        n.code = append(n.code, fmt.Sprintf("=, %s, %s", currSymTab.varSymTab[GetRealName(v[6:])][3], currSymTab.varSymTab[GetRealName(rightExpr[k][6:])][3]))
+                                        n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", currSymTab.varSymTab[GetRealName(v[6:])][3], currSymTab.varSymTab[GetRealName(rightExpr[k][6:])][3]))
                                 } else if len(rightExpr[k]) >= 5 && rightExpr[k][:5] == "deref" {
-                                        n.code = append(n.code, fmt.Sprintf("=, %s, %s", currSymTab.varSymTab[GetRealName(v)][0], currSymTab.varSymTab[GetRealName(rightExpr[k][6:])][3]))
+                                        n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", currSymTab.varSymTab[GetRealName(v)][0], currSymTab.varSymTab[GetRealName(rightExpr[k][6:])][3]))
                                 } else if len(v) >= 5 && v[:5] == "deref" {
-                                        n.code = append(n.code, fmt.Sprintf("=, %s, %s", currSymTab.varSymTab[GetRealName(v[6:])][3], rightExpr[k]))
+                                        n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", currSymTab.varSymTab[GetRealName(v[6:])][3], rightExpr[k]))
                                 } else {
-                                        n.code = append(n.code, fmt.Sprintf("=, %s, %s", v, rightExpr[k]))
+                                        n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", v, rightExpr[k]))
                                         _, ok := symTab[v]
                                         if ok {
                                                 if symTab[v][1] == "array" {
                                                         arrayInfo := utils.SplitAndSanitize(symTab[v][0], ",")
                                                         // arrayInfo[0]: array name
                                                         // arrayInfo[1]: array index
-                                                        n.code = append(n.code, fmt.Sprintf("into, %s, %s, %s, %s", arrayInfo[0], arrayInfo[0], arrayInfo[1], v))
+                                                        n.Code = append(n.Code, fmt.Sprintf("into, %s, %s, %s, %s", arrayInfo[0], arrayInfo[0], arrayInfo[1], v))
                                                 }
                                         }
                                 }
@@ -2676,26 +2664,26 @@ Assignment : ExpressionList assignOp ExpressionList
                 } () >>
            | IdentifierList "=" ExpressionList
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
+                        n := ast.Node{"", []string{}}
                         // TODO: Structs do not support multiple short declarations in a
                         // single statement for now.
-                        exprName := $2.(Node).place
+                        exprName := $2.(ast.Node).Place
                         if len(exprName) >= 6 && exprName[:6] == "struct" {
                                 return nil, errors.New("Use shortAssign for declaring structs")
                         } else {
-                                n.code = $2.(Node).code
-                                expr := utils.SplitAndSanitize($2.(Node).place, ",")
-                                if len(expr) != len($0.(Node).code) {
+                                n.Code = $2.(ast.Node).Code
+                                expr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
+                                if len(expr) != len($0.(ast.Node).Code) {
                                         return nil, errors.New("Number of values in LHS and RHS is not equal")
                                 }
-                                for k, v := range $0.(Node).code {
+                                for k, v := range $0.(ast.Node).Code {
                                         symTabEntry, found := SearchInScope(v)
                                         if found {
                                                 renamedVar := symTabEntry[0]
                                                 if len(expr[k]) >= 5 && expr[k][:5] == "array" {
                                                         return nil, errors.New("Use shortAssign for declaring arrays")
                                                 } else if len(currSymTab.varSymTab[v]) >= 2 && currSymTab.varSymTab[v][1] != "pointer" {
-                                                        n.code = append(n.code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
+                                                        n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
                                                 }
                                         } else {
                                                 return nil, errors.New("Variable not declared")
@@ -2708,10 +2696,10 @@ Assignment : ExpressionList assignOp ExpressionList
 
 ShortVarDecl : IdentifierList shortAssign ExpressionList
                 << func() (Attrib, error) {
-                        n := Node{"", []string{}}
+                        n := ast.Node{"", []string{}}
                         // TODO: Structs do not support multiple short declarations in a
                         // single statement for now.
-                        exprName := $2.(Node).place
+                        exprName := $2.(ast.Node).Place
                         if len(exprName) >= 6 && exprName[:6] == "struct" {
                                 // NOTE: The following index calculations assume that
                                 // struct names cannot include a ':' character.
@@ -2721,16 +2709,16 @@ ShortVarDecl : IdentifierList shortAssign ExpressionList
                                         return nil, err
                                 }
                                 // TODO: Multiple struct initializations are not handled currently.
-                                structName := $0.(Node).code[0]
+                                structName := $0.(ast.Node).Code[0]
                                 // keeping structName in the symbol table with type as Struct
                                 currSymTab.varSymTab[structName] = []string{structName, "struct"}
                                 // The individual struct member initializers can contain
                                 // expressions whose code need to be added before the
                                 // members are initialized.
-                                n.code = append(n.code, $2.(Node).code[2*structLen:]...)
+                                n.Code = append(n.Code, $2.(ast.Node).Code[2*structLen:]...)
                                 // Add code for struct member initializations.
                                 var varName, varVal string
-                                for k, v := range $2.(Node).code[:2*structLen] {
+                                for k, v := range $2.(ast.Node).Code[:2*structLen] {
                                         if k % 2 == 0 {
                                                 // Member names are located at even locations.
                                                 varName = v
@@ -2741,19 +2729,19 @@ ShortVarDecl : IdentifierList shortAssign ExpressionList
                                                 currSymTab.varSymTab[fmt.Sprintf("%s.%s", structName, varName)] = []string{renamedVar, "int"}
                                                 // TODO: Add the struct initializations to symbol table. Also,
                                                 // handle member accesses as -
-                                                //      node := Node{1}
+                                                //      node := ast.Node{1}
                                                 //      b := node.val  // member access
-                                                n.code = append(n.code, fmt.Sprintf("=, %s, %s", renamedVar, varVal))
+                                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, varVal))
                                         }
                                 }
                         } else {
-                                n.code = $2.(Node).code
-                                placeVals := strings.Split($2.(Node).place, ",")
-                                expr := utils.SplitAndSanitize($2.(Node).place, ",")
-                                if len(expr) != len($0.(Node).code) {
+                                n.Code = $2.(ast.Node).Code
+                                placeVals := strings.Split($2.(ast.Node).Place, ",")
+                                expr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
+                                if len(expr) != len($0.(ast.Node).Code) {
                                         return nil, errors.New("Number of values in LHS and RHS is not equal")
                                 }
-                                for k, v := range $0.(Node).code {
+                                for k, v := range $0.(ast.Node).Code {
                                         renamedVar := RenameVariable(v)
                                         _, ok := currSymTab.varSymTab[v]
                                         if !ok {
@@ -2772,14 +2760,14 @@ ShortVarDecl : IdentifierList shortAssign ExpressionList
                                         }
                                         if len(expr[k]) >= 5 && expr[k][:5] == "array" {
                                                 // TODO: rename arrays
-                                                n.code = append(n.code, fmt.Sprintf("decl, %s, %s", renamedVar, expr[k][6:]))
+                                                n.Code = append(n.Code, fmt.Sprintf("decl, %s, %s", renamedVar, expr[k][6:]))
                                         } else if len(expr[k]) >= 5 && expr[k][0:5] == "deref" {
-                                                n.code = append(n.code, fmt.Sprintf("=, %s, %s", renamedVar, currSymTab.varSymTab[GetRealName(expr[k][6:])][3]))
+                                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, currSymTab.varSymTab[GetRealName(expr[k][6:])][3]))
                                         } else if len(placeVals[k]) >= 7 && placeVals[k][:6] == "string" {
                                                 // Check if the RHS is string.
-                                                n.code = append(n.code, fmt.Sprintf("declStr, %s, %s", renamedVar, expr[k][7:]))
+                                                n.Code = append(n.Code, fmt.Sprintf("declStr, %s, %s", renamedVar, expr[k][7:]))
                                         } else if len(currSymTab.varSymTab[v]) >= 2 && currSymTab.varSymTab[v][1] != "pointer" {
-                                                n.code = append(n.code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
+                                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
                                         }
                                 }
                         }
@@ -2789,6 +2777,6 @@ ShortVarDecl : IdentifierList shortAssign ExpressionList
 
 Label : identifier
                  << func() (Attrib, error) {
-                       return Node{string($0.(*token.Token).Lit), []string{}}, nil
+                       return ast.Node{string($0.(*token.Token).Lit), []string{}}, nil
                  } () >>
               ;
