@@ -100,12 +100,6 @@ import(
         "github.com/shivansh/gogo/tmp/token"
 )
 
-// ast.Node represents a node in the AST of a given program.
-// type ast.Node struct {
-// 	place string   // variable storing the value if node represents an expression
-// 	code  []string // IR instructions
-// }
-
 type symTabType map[string][]string
 
 type SymInfo struct {
@@ -324,99 +318,11 @@ SourceFile : RepeatTopLevelDecl
 
 // TODO: MethodDecl is not supported at the moment.
 // TopLevelDecl  = Declaration | FunctionDecl | MethodDecl .
-RepeatTopLevelDecl : TopLevelDecl RepeatTopLevelDecl
-                        << func() (Attrib, error) {
-                              n := ast.Node{"", $0.(ast.Node).Code}
-                              n.Code = append(n.Code, $1.(ast.Node).Code...)
-                              return n, nil
-                        } () >>
-                   | empty
-                        << func() (Attrib, error) {
-                              return ast.Node{"", []string{}}, nil
-                        } () >>
-                   ;
-
-TopLevelDecl : Declaration RepeatTerminator
+RepeatTopLevelDecl
+        : TopLevelDecl RepeatTopLevelDecl
                 << func() (Attrib, error) {
-                        return ast.Node{"", $0.(ast.Node).Code}, nil
-                } () >>
-             | FunctionDecl RepeatTerminator
-                << func() (Attrib, error) {
-                        return ast.Node{"", $0.(ast.Node).Code}, nil
-                } () >>
-             ;
-
-// Declaration = ConstDecl | TypeDecl | VarDecl .
-Declaration : ConstDecl
-                << func() (Attrib, error) {
-                        return ast.Node{"", $0.(ast.Node).Code}, nil
-                } () >>
-            | TypeDecl
-                    << func() (Attrib, error) {
-                        return ast.Node{"", $0.(ast.Node).Code}, nil
-                    } () >>
-            | VarDecl
-                << func() (Attrib, error) {
-                        return ast.Node{"", $0.(ast.Node).Code}, nil
-                } () >>
-            ;
-
-// VarDecl     = "var" ( VarSpec | "(" { VarSpec ";" } ")" ) .
-// VarSpec     = IdentifierList ( Type [ "=" ExpressionList ] | "=" ExpressionList ) .
-VarDecl : kwdVar VarSpec
-            << func() (Attrib, error) {
-                    return ast.Node{"", $1.(ast.Node).Code}, nil
-            } () >>
-//         | kwdVar "(" RepeatTerminator RepeatVarSpec ")"
-//             << func() (Attrib, error) {
-//                   fmt.Println("kwdVar \"(\" RepeatTerminator RepeatVarSpec \")\"");
-//                   return nil, nil
-//             } () >>
-        ;
-//
-// // VarSpec     = IdentifierList ( Type [ "=" ExpressionList ] | "=" ExpressionList ) .
-// RepeatVarSpec : VarSpec terminator RepeatTerminator RepeatVarSpec
-//                 << func() (Attrib, error) {
-//                       fmt.Println("VarSpec terminator RepeatTerminator RepeatVarSpec");
-//                       return nil, nil
-//                 } () >>
-//               | VarSpec RepeatTerminator
-//                 << func() (Attrib, error) {
-//                       fmt.Println("VarSpec RepeatTerminator");
-//                       return nil, nil
-//                 } () >>
-//               ;
-//
-VarSpec : IdentifierList Type
-                << func() (Attrib, error) {
-                        n := ast.Node{"", []string{}}
-                        for _, v := range $0.(ast.Node).Code {
-                                renamedVar := RenameVariable(v)
-                                currSymTab.varSymTab[v] = []string{renamedVar, "int"} // TODO: Handle other types
-                                n.Code = append(n.Code, fmt.Sprintf("=, %s, 0", renamedVar))
-                        }
-                        return n, nil
-                } () >>
-        | IdentifierList Type "=" ExpressionList
-                << func() (Attrib, error) {
-                        n := ast.Node{"", $3.(ast.Node).Code}
-                        expr := utils.SplitAndSanitize($3.(ast.Node).Place, ",")
-                        for k, v := range $0.(ast.Node).Code {
-                                renamedVar := RenameVariable(v)
-                                currSymTab.varSymTab[v] = []string{renamedVar, "int"} // TODO: Handle other types
-                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
-                        }
-                        return n, nil
-                } () >>
-        | IdentifierList "=" ExpressionList
-                << func() (Attrib, error) {
-                        n := ast.Node{"", $2.(ast.Node).Code}
-                        expr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
-                        for k, v := range $0.(ast.Node).Code {
-                                renamedVar := RenameVariable(v)
-                                currSymTab.varSymTab[v] = []string{renamedVar, "int"} // TODO: Handle other types
-                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
-                        }
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $1.(ast.Node).Code...)
                         return n, nil
                 } () >>
         | empty
@@ -425,32 +331,60 @@ VarSpec : IdentifierList Type
                 } () >>
         ;
 
+TopLevelDecl
+        : Declaration RepeatTerminator
+                << func() (Attrib, error) {
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
+                } () >>
+        | FunctionDecl RepeatTerminator
+                << func() (Attrib, error) {
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
+                } () >>
+        ;
+
+// Declaration = ConstDecl | TypeDecl | VarDecl .
+Declaration
+        : ConstDecl
+                << func() (Attrib, error) {
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
+                } () >>
+        | TypeDecl
+                << func() (Attrib, error) {
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
+                } () >>
+        | VarDecl
+                << func() (Attrib, error) {
+                        return ast.Node{"", $0.(ast.Node).Code}, nil
+                } () >>
+        ;
+
+// VarDecl     = "var" ( VarSpec | "(" { VarSpec ";" } ")" ) .
+// VarSpec     = IdentifierList ( Type [ "=" ExpressionList ] | "=" ExpressionList ) .
+VarDecl
+        : kwdVar VarSpec
+                << func() (Attrib, error) {
+                        return ast.Node{"", $1.(ast.Node).Code}, nil
+                } () >>
+//         | kwdVar "(" RepeatTerminator RepeatVarSpec ")"
+//             << func() (Attrib, error) {
+//                   fmt.Println("kwdVar \"(\" RepeatTerminator RepeatVarSpec \")\"");
+//                   return nil, nil
+//             } () >>
+        ;
+
+VarSpec
+        : IdentifierList Type                     << ast.NewVarSpec(0, $0, $1) >>
+        | IdentifierList Type "=" ExpressionList  << ast.NewVarSpec(1, $0, $1, $3) >>
+        | IdentifierList "=" ExpressionList       << ast.NewVarSpec(2, $0, $2) >>
+        | empty                                   << ast.NewVarSpec(3) >>
+        ;
+
 // TypeDecl  = "type" ( TypeSpec | "(" { TypeSpec ";" } ")" ) .
 // TypeSpec  = AliasDecl | TypeDef .
 // AliasDecl = identifier "=" Type
 // TypeDef   = identifier Type
-TypeDecl : kwdType TypeSpec
-                << func() (Attrib, error) {
-                        typeInfo := utils.SplitAndSanitize($1.(ast.Node).Place, ",")
-                        structName := strings.TrimSpace(typeInfo[1])
-                        switch strings.TrimSpace(typeInfo[0]) {
-                        case "struct":
-                                // Create a global symbol table entry.
-                                // NOTE: The symbol table entry of a struct is of the form -
-                                //      structName : []{"struct", memberName1, memberType1, memberName2, memberType2, ...}
-                                globalSymTab[structName] = []string{"struct"}
-                                globalSymTab[structName] = append(globalSymTab[structName], $1.(ast.Node).Code...)
-                        default: // TODO: Add remaining types.
-                                return nil, errors.New("Unknown type")
-                        }
-                        // TODO: Member initialization will be done when a new object is instantiated.
-                        return ast.Node{"", []string{}}, nil
-                } () >>
+TypeDecl : kwdType TypeSpec   << ast.NewTypeDecl($0, $1) >>
 //          | kwdType "(" RepeatTerminator RepeatTypeSpec ")"
-//                 << func() (Attrib, error) {
-//                         fmt.Println("kwdType \"(\" RepeatTerminator RepeatTypeSpec \")\"");
-//                         return nil, nil
-//                 } () >>
          ;
 //
 // RepeatTypeSpec : TypeSpec terminator RepeatTerminator RepeatTypeSpec
@@ -521,27 +455,8 @@ ConstDecl : kwdConst ConstSpec
 //                 } () >>
 //                 ;
 
-ConstSpec : IdentifierList
-                << func() (Attrib, error) {
-                        n := ast.Node{"", []string{}}
-                        for _, v := range $0.(ast.Node).Code {
-                                renamedVar := RenameVariable(v)
-                                currSymTab.varSymTab[v] = []string{renamedVar, "int"} // TODO: Handle other types
-                                n.Code = append(n.Code, fmt.Sprintf("=, %s, 0", renamedVar))
-                        }
-                        return n, nil
-                } () >>
-          | IdentifierList "=" ExpressionList
-                << func() (Attrib, error) {
-                        n := ast.Node{"", $2.(ast.Node).Code}
-                        expr := utils.SplitAndSanitize($2.(ast.Node).Place, ",")
-                        for k, v := range $0.(ast.Node).Code {
-                                renamedVar := RenameVariable(v)
-                                currSymTab.varSymTab[v] = []string{renamedVar, "int"}
-                                n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, expr[k]))
-                        }
-                        return n, nil
-                } () >>
+ConstSpec : IdentifierList                     << ast.NewConstSpec(0, $0) >>
+          | IdentifierList "=" ExpressionList  << ast.NewConstSpec(1, $0, $2) >>
           // | IdentifierList Type "=" ExpressionList
           //       << func() (Attrib, error) {
           //               fmt.Println("IdentifierList Type \"=\" ExpressionList");

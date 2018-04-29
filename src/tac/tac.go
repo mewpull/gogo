@@ -222,13 +222,12 @@ func (blk Blk) EvalNextUseInfo() {
 	}
 }
 
-// GenTAC generates the three-address code (in-memory) data structure
-// from the input file. The format of each statement in the input file
-// is a tuple of the form -
+// GenTAC generates the three-address code (in-memory) data structure from the
+// input file. The format of each statement in the input file is a tuple -
 // 	<line-number, operation, destination-variable, source-variable(s)>
 //
-// The three-address code is a collection of basic block data structures,
-// which are identified while reading the IR file as per following rules -
+// The three-address code is a collection of basic block data structures, which
+// are identified while reading the IR file as per following rules -
 // 	A basic block starts:
 //		* at label instruction
 //		* after jump instruction
