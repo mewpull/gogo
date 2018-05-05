@@ -6,11 +6,14 @@ package ast
 import (
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/shivansh/gogo/src/utils"
+	"github.com/shivansh/gogo/tmp/lexer"
+	"github.com/shivansh/gogo/tmp/parser"
 	"github.com/shivansh/gogo/tmp/token"
 )
 
@@ -154,14 +157,32 @@ func PrintIR(src Attrib) (Attrib, error) {
 	return nil, nil
 }
 
-// InitNode initializes a AST node with the given place and code values.
+// InitNode initializes a AST node with the provided place and code values.
 func InitNode(place string, code []string) (Node, error) {
 	return Node{place, code}, nil
 }
 
-// NewNode creates a new AST node from the given attribute.
+// NewNode creates a new AST node from the provided attribute.
 func NewNode(attr Attrib) (Node, error) {
 	return Node{attr.(Node).Place, attr.(Node).Code}, nil
+}
+
+// --- [ Import declarations ] -------------------------------------------------
+
+// NewImportDecl returns an import declaration.
+func NewImportDecl(decl, declList Attrib) (Node, error) {
+	imports := decl.(Node).Code
+	imports = append(imports, declList.(Node).Code...)
+	fmt.Println(imports)
+	for _, v := range imports {
+		s := lexer.NewLexer(content)
+		p := parser.NewParser()
+		_, err = p.Parse(s)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	return Node{}, nil
 }
 
 // --- [ Top level declarations ] ----------------------------------------------
@@ -217,7 +238,7 @@ func NewVarSpec(typ int, args ...Attrib) (Node, error) {
 	}
 	for k, v := range args[0].(Node).Code {
 		renamedVar := RenameVariable(v)
-		// TODO: Handle other types
+		// TODO: types
 		currSymTab.varSymTab[v] = []string{renamedVar, "int"}
 		if typ == 0 {
 			n.Code = append(n.Code, fmt.Sprintf("=, %s, 0", renamedVar))
@@ -240,7 +261,7 @@ func NewTypeDecl(args ...Attrib) (Node, error) {
 		//      structName : []{"struct", memberName1, memberType1, ...}
 		globalSymTab[structName] = []string{"struct"}
 		globalSymTab[structName] = append(globalSymTab[structName], args[1].(Node).Code...)
-	default: // TODO: Add remaining types.
+	default: // TODO: types
 		return Node{}, errors.New("Unknown type")
 	}
 	// TODO: Member initialization will be done when a new object is
@@ -1167,10 +1188,6 @@ func NewShortDecl(identList, exprList Attrib) (Node, error) {
 				varVal = v
 				renamedVar := RenameVariable(fmt.Sprintf("%s.%s", structName, varName))
 				currSymTab.varSymTab[fmt.Sprintf("%s.%s", structName, varName)] = []string{renamedVar, "int"}
-				// TODO: Add the struct initializations to symbol table. Also,
-				// handle member accesses as -
-				//      node := Node{1}
-				//      b := node.val  // member access
 				n.Code = append(n.Code, fmt.Sprintf("=, %s, %s", renamedVar, varVal))
 			}
 		}
@@ -1186,7 +1203,7 @@ func NewShortDecl(identList, exprList Attrib) (Node, error) {
 			renamedVar := RenameVariable(v)
 			_, ok := currSymTab.varSymTab[v]
 			if !ok {
-				// TODO: All types are int currently.
+				// TODO: types
 				if len(expr[k]) >= 7 && expr[k][0:7] == "pointer" {
 					currSymTab.varSymTab[v] = []string{renamedVar, "pointer", "int", expr[k][8:]}
 				} else if len(currSymTab.varSymTab[GetRealName(expr[k])]) >= 2 && currSymTab.varSymTab[GetRealName(expr[k])][1] == "pointer" {

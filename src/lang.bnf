@@ -108,62 +108,41 @@ Start
 
 // SourceFile : PackageClause terminator RepeatTerminator RepeatImportDecl RepeatTopLevelDecl
 SourceFile
-        : RepeatTopLevelDecl  << ast.InitNode("", $0.(ast.Node).Code) >>
+        : RepeatImportDecl RepeatTopLevelDecl  << ast.InitNode("", $1.(ast.Node).Code) >>
         ;
 
-// RepeatImportDecl : ImportDecl terminator RepeatTerminator RepeatImportDecl
-//                         << func() (Attrib, error) {
-//                                 n := Node{"", []string{}}
-//                                 n.Code = append(n.Code, $0.(ast.Node).Code...)
-//                                 n.Code = append(n.Code, $3.(ast.Node).Code...)
-//                                 n.Code = append(n.Code, "\n")
-//                                 return nil, nil
-//                         } () >>
-//                  | empty
-//                         << func() (Attrib, error) {
-//                                 n := Node{"", []string{}}
-//                                 return n, nil
-//                         } () >>
-//                  ;
-//
-// // ImportDecl       = "import" ( ImportSpec | "(" { ImportSpec ";" } ")" ) .
-// // ImportSpec       = [ "." | PackageName ] ImportPath .
-// // ImportPath       = string_lit .
-// ImportDecl : kwdImport ImportSpec
-//                 << func() (Attrib, error) {
-//                         fmt.Println("kwdImport ImportSpec");
-//                         return nil, nil
-//                 } () >>
-//            | kwdImport "(" RepeatImportSpec ")"
-//                 << func() (Attrib, error) {
-//                         fmt.Println("kwdImport \"(\" RepeatImportSpec \")\"");
-//                         return nil, nil
-//                 } () >>
-//            ;
-//
-// RepeatImportSpec : ImportSpec terminator RepeatImportSpec
-//                 << func() (Attrib, error) {
-//                         fmt.Println("ImportSpec terminator RepeatImportSpec");
-//                         return nil, nil
-//                 } () >>
-//                  | empty
-//                 << func() (Attrib, error) {
-//                         fmt.Println("empty");
-//                         return nil, nil
-//                 } () >>
+RepeatImportDecl
+        : ImportDecl terminator RepeatTerminator RepeatImportDecl
+                 << ast.NewImportDecl($0, $3) >>
+        | empty  << ast.InitNode("", []string{}) >>
+        ;
+
+// ImportDecl       = "import" ( ImportSpec | "(" { ImportSpec ";" } ")" ) .
+// ImportSpec       = [ "." | PackageName ] ImportPath .
+// ImportPath       = string_lit .
+ImportDecl
+        : kwdImport ImportSpec                << ast.InitNode("", $1.(ast.Node).Code) >>
+        | kwdImport "(" RepeatImportSpec ")"  << ast.InitNode("", $1.(ast.Node).Code) >>
+        ;
+
+RepeatImportSpec
+        : ImportSpec terminator RepeatImportSpec
+                << func() (Attrib, error) {
+                        n := ast.Node{"", $0.(ast.Node).Code}
+                        n.Code = append(n.Code, $2.(ast.Node).Code...)
+                        return n, nil
+                } () >>
+        | empty  << ast.InitNode("", []string{}) >>
 //                 // TODO: '\n' can follow "import (", but a ';' cannot as opposed to go's grammar.
 //                  | terminator RepeatImportSpec
 //                 << func() (Attrib, error) {
 //                         fmt.Println("terminator RepeatImportSpec");
 //                         return nil, nil
 //                 } () >>
-//                  ;
-//
-// ImportSpec : ImportPath
-//                 << func() (Attrib, error) {
-//                         fmt.Println("ImportPath");
-//                         return nil, nil
-//                 } () >>
+        ;
+
+ImportSpec
+        : ImportPath  << ast.InitNode("", $0.(ast.Node).Code) >>
 //            | "." ImportPath
 //                 << func() (Attrib, error) {
 //                         fmt.Println("\".\" ImportPath");
@@ -174,15 +153,12 @@ SourceFile
 //                         fmt.Println("PackageName ImportPath");
 //                         return nil, nil
 //                 } () >>
-//            ;
-//
-// ImportPath : stringLit
-//                 << func() (Attrib, error) {
-//                       fmt.Println("stringLit");
-//                       return nil, nil
-//                 } () >>
-//            ;
-//
+        ;
+
+ImportPath
+        : stringLit  << ast.InitNode("", []string{string($0.(*token.Token).Lit)}) >>
+        ;
+
 // PackageClause : kwdPackage PackageName
 //                 << func() (Attrib, error) {
 //                         fmt.Println("kwdPackage PackageName");
